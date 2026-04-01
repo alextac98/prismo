@@ -21,10 +21,12 @@ Use `?` inside the app for the live help overlay.
 
 Important behavior to remember while developing:
 - `Tab` changes which pane has focus
-- `Channels` focus changes which channel is selected
-- `Details` and `Latest Value` focus move a text cursor within those panes
+- `Channels` focus changes which row in the tree is selected
+- `Details` is a fixed summary pane with a cursor for copy, but it does not scroll
+- `Latest Value` focus moves a text cursor within that pane and may scroll
 - `y` behaves differently by focus
 - `/` opens the filter prompt and temporarily takes over keyboard input
+- `:` opens command mode, and `:q` is the only quit path
 
 ## Clipboard Behavior
 
@@ -56,6 +58,12 @@ The current renderer split is by `ChannelValue`:
 - numeric -> text summary plus line chart
 - text/integer/bool -> text block
 
+A few current UI rules matter when extending renderers:
+- `Details` should stay compact and fixed-height
+- long payloads belong in `Latest Value`
+- scrollable panes should use the shared scrollbar path
+- visible text colors now carry semantics similar to the channel tree, so keep label/value/status styling consistent
+
 If you add richer value kinds later, this is where new pane renderers should go.
 
 ## Evolve The Data Model
@@ -71,6 +79,7 @@ Likely future expansions:
 
 ## Suggested Next Engineering Steps
 
+- add documentation or tests around the current tree/filter/command interaction model
 - add unit tests for `TelemetryStore`
 - snapshot-test the TUI rendering surface
 - move the hard-coded plugin construction behind a config or CLI layer

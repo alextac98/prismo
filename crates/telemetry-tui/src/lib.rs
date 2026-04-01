@@ -1,16 +1,20 @@
 use std::cmp;
+use std::collections::{BTreeMap, HashSet};
 use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::{Constraint, Direction, Layout, Position, Rect};
-use ratatui::prelude::{Alignment, Buffer, Color, Line, Modifier, Style, Widget};
+use ratatui::prelude::{Alignment, Color, Line, Modifier, Style};
 use ratatui::symbols;
 use ratatui::text::Span;
 use ratatui::widgets::{
     Axis, Block, Borders, Chart, Clear, Dataset, GraphType, List, ListItem, ListState, Paragraph,
-    Wrap,
+    Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap,
 };
 use telemetry_core::{ChannelSnapshot, ChannelValue, StoreSnapshot};
+
+const MIN_TERMINAL_WIDTH: u16 = 80;
+const MIN_TERMINAL_HEIGHT: u16 = 20;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FocusPane {
@@ -23,7 +27,10 @@ pub enum FocusPane {
 pub enum UiAction {
     None,
     Quit,
+    RunCommand(String),
     YankSelectedValue,
+    ToggleSelectedNamespace,
+    ToggleAllNamespaces,
 }
 
 #[derive(Clone, Debug)]
@@ -64,14 +71,23 @@ impl TextCursor {
 pub struct UiState {
     pub selected: usize,
     pub focus: FocusPane,
+    pub command_mode: bool,
     pub filter_mode: bool,
     pub help_mode: bool,
+    pub command_input: String,
     pub filter_input: String,
     pub status_notice: Option<StatusNotice>,
     channel_area: Option<Rect>,
+    details_area: Option<Rect>,
+    latest_area: Option<Rect>,
     rendered_channels: usize,
+    channel_scroll_offset: usize,
+    channel_view_rows: usize,
+    details_scroll_offset: usize,
+    latest_scroll_offset: usize,
     details_cursor: TextCursor,
     latest_cursor: TextCursor,
+    collapsed_namespaces: HashSet<String>,
 }
 
 pub struct CopyPayload {
@@ -79,14 +95,61 @@ pub struct CopyPayload {
     pub label: String,
 }
 
+#[derive(Clone)]
+struct SelectableLine {
+    raw: String,
+    rendered: Line<'static>,
+}
+
+struct PaneContent {
+    detail_lines: Vec<SelectableLine>,
+    latest_title: String,
+    latest_content: LatestPaneContent,
+}
+
 enum LatestPaneContent {
-    Text(Vec<String>),
+    Text(Vec<SelectableLine>),
     Numeric {
-        summary: Vec<String>,
+        summary: Vec<SelectableLine>,
         points: Vec<(f64, f64)>,
         min_y: f64,
         max_y: f64,
     },
+}
+
+#[derive(Default)]
+struct NamespaceNode<'a> {
+    path: String,
+    name: String,
+    namespaces: BTreeMap<String, NamespaceNode<'a>>,
+    channels: Vec<&'a ChannelSnapshot>,
+}
+
+#[derive(Clone)]
+struct TreeRow<'a> {
+    depth: usize,
+    kind: TreeRowKind<'a>,
+}
+
+#[derive(Clone)]
+enum TreeRowKind<'a> {
+    Namespace {
+        path: String,
+        name: String,
+        descendant_channels: Vec<&'a ChannelSnapshot>,
+        child_namespace_count: usize,
+        direct_channel_count: usize,
+        collapsed: bool,
+    },
+    Channel {
+        channel: &'a ChannelSnapshot,
+    },
+}
+
+#[derive(Clone)]
+enum RowKey {
+    Namespace(String),
+    Channel(String),
 }
 
 impl Default for FocusPane {
@@ -95,64 +158,109 @@ impl Default for FocusPane {
     }
 }
 
+impl<'a> NamespaceNode<'a> {
+    fn new(name: String, path: String) -> Self {
+        Self {
+            path,
+            name,
+            namespaces: BTreeMap::new(),
+            channels: Vec::new(),
+        }
+    }
+}
+
 impl UiState {
     pub fn new() -> Self {
         Self {
             selected: 0,
             focus: FocusPane::Channels,
+            command_mode: false,
             filter_mode: false,
             help_mode: false,
+            command_input: String::new(),
             filter_input: String::new(),
             status_notice: None,
             channel_area: None,
+            details_area: None,
+            latest_area: None,
             rendered_channels: 0,
+            channel_scroll_offset: 0,
+            channel_view_rows: 0,
+            details_scroll_offset: 0,
+            latest_scroll_offset: 0,
             details_cursor: TextCursor::default(),
             latest_cursor: TextCursor::default(),
+            collapsed_namespaces: HashSet::new(),
         }
     }
 
-    pub fn visible_channels<'a>(&self, snapshot: &'a StoreSnapshot) -> Vec<&'a ChannelSnapshot> {
-        let needle = self.filter_input.trim().to_ascii_lowercase();
-        snapshot
-            .channels
-            .iter()
-            .filter(|channel| {
-                if needle.is_empty() {
-                    true
-                } else {
-                    channel
-                        .descriptor
-                        .path
-                        .to_ascii_lowercase()
-                        .contains(&needle)
-                        || channel
-                            .descriptor
-                            .description
-                            .to_ascii_lowercase()
-                            .contains(&needle)
-                }
-            })
-            .collect()
+    pub fn selected_channel<'a>(&self, snapshot: &'a StoreSnapshot) -> Option<&'a ChannelSnapshot> {
+        match self.selected_row(snapshot)?.kind {
+            TreeRowKind::Channel { channel } => Some(channel),
+            TreeRowKind::Namespace { .. } => None,
+        }
     }
 
-    pub fn selected_channel<'a>(&self, snapshot: &'a StoreSnapshot) -> Option<&'a ChannelSnapshot> {
-        let channels = self.visible_channels(snapshot);
-        channels.get(self.selected).copied()
+    pub fn selected_namespace_path(&self, snapshot: &StoreSnapshot) -> Option<String> {
+        match self.selected_row(snapshot)?.kind {
+            TreeRowKind::Namespace { path, .. } => Some(path),
+            TreeRowKind::Channel { .. } => None,
+        }
+    }
+
+    pub fn toggle_selected_namespace(&mut self, snapshot: &StoreSnapshot) -> bool {
+        let selection = self.selected_row_key(snapshot);
+        let Some(path) = self.selected_namespace_path(snapshot) else {
+            return false;
+        };
+
+        if !self.collapsed_namespaces.insert(path.clone()) {
+            self.collapsed_namespaces.remove(&path);
+        }
+        self.restore_selection(snapshot, selection);
+
+        true
+    }
+
+    pub fn toggle_all_namespaces(&mut self, snapshot: &StoreSnapshot) -> (bool, usize) {
+        let selection = self.selected_row_key(snapshot);
+        let paths = visible_namespace_paths(self.filtered_channels(snapshot));
+        if paths.is_empty() {
+            return (false, 0);
+        }
+
+        let all_collapsed = paths
+            .iter()
+            .all(|path| self.collapsed_namespaces.contains(path));
+        if all_collapsed {
+            self.collapsed_namespaces
+                .retain(|path| !paths.contains(path));
+        } else {
+            self.collapsed_namespaces.extend(paths.iter().cloned());
+        }
+        self.restore_selection(snapshot, selection);
+
+        (!all_collapsed, paths.len())
     }
 
     pub fn clamp_selection(&mut self, total: usize) {
         self.rendered_channels = total;
         if total == 0 {
             self.selected = 0;
+            self.channel_scroll_offset = 0;
         } else {
             self.selected = cmp::min(self.selected, total - 1);
+            let max_offset = total.saturating_sub(self.channel_view_rows.max(1));
+            self.channel_scroll_offset = cmp::min(self.channel_scroll_offset, max_offset);
+            if self.selected < self.channel_scroll_offset {
+                self.channel_scroll_offset = self.selected;
+            }
         }
     }
 
     pub fn on_key(&mut self, key: KeyEvent) -> UiAction {
         if self.help_mode {
             match key.code {
-                KeyCode::Char('q') => return UiAction::Quit,
                 KeyCode::Esc | KeyCode::Char('?') => {
                     self.help_mode = false;
                 }
@@ -161,9 +269,38 @@ impl UiState {
             return UiAction::None;
         }
 
+        if self.command_mode {
+            match key.code {
+                KeyCode::Esc => {
+                    self.command_mode = false;
+                    self.command_input.clear();
+                }
+                KeyCode::Enter => {
+                    self.command_mode = false;
+                    let command = self.command_input.trim().to_string();
+                    self.command_input.clear();
+                    if !command.is_empty() {
+                        return UiAction::RunCommand(command);
+                    }
+                }
+                KeyCode::Backspace => {
+                    self.command_input.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.command_input.push(c);
+                }
+                _ => {}
+            }
+            return UiAction::None;
+        }
+
         if self.filter_mode {
             match key.code {
-                KeyCode::Esc => self.filter_mode = false,
+                KeyCode::Esc => {
+                    self.filter_mode = false;
+                    self.filter_input.clear();
+                    self.selected = 0;
+                }
                 KeyCode::Enter => self.filter_mode = false,
                 KeyCode::Backspace => {
                     self.filter_input.pop();
@@ -179,8 +316,13 @@ impl UiState {
         }
 
         match key.code {
-            KeyCode::Char('q') => UiAction::Quit,
             KeyCode::Char('y') => UiAction::YankSelectedValue,
+            KeyCode::Enter if self.focus == FocusPane::Channels => {
+                UiAction::ToggleSelectedNamespace
+            }
+            KeyCode::Char('z') if self.focus == FocusPane::Channels => {
+                UiAction::ToggleAllNamespaces
+            }
             KeyCode::Char('j') => {
                 if self.focus == FocusPane::Channels {
                     self.move_channel_selection(1);
@@ -191,7 +333,7 @@ impl UiState {
             }
             KeyCode::Char('k') => {
                 if self.focus == FocusPane::Channels {
-                    self.selected = self.selected.saturating_sub(1);
+                    self.move_channel_selection_up(1);
                 } else if let Some(cursor) = self.focused_text_cursor_mut() {
                     cursor.move_up();
                 }
@@ -207,7 +349,7 @@ impl UiState {
             }
             KeyCode::Up => {
                 if self.focus == FocusPane::Channels {
-                    self.selected = self.selected.saturating_sub(1);
+                    self.move_channel_selection_up(1);
                 } else if let Some(cursor) = self.focused_text_cursor_mut() {
                     cursor.move_up();
                 }
@@ -227,16 +369,25 @@ impl UiState {
             }
             KeyCode::Char('g') | KeyCode::Home => {
                 self.selected = 0;
+                self.channel_scroll_offset = 0;
                 UiAction::None
             }
             KeyCode::Char('G') | KeyCode::End => {
                 if self.rendered_channels > 0 {
                     self.selected = self.rendered_channels - 1;
+                    self.channel_scroll_offset = self
+                        .rendered_channels
+                        .saturating_sub(self.channel_view_rows.max(1));
                 }
                 UiAction::None
             }
             KeyCode::Char('/') => {
                 self.filter_mode = true;
+                UiAction::None
+            }
+            KeyCode::Char(':') => {
+                self.command_mode = true;
+                self.command_input.clear();
                 UiAction::None
             }
             KeyCode::Char('?') => {
@@ -281,30 +432,91 @@ impl UiState {
     }
 
     pub fn on_mouse(&mut self, event: MouseEvent) {
-        if !matches!(event.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
-
-        let Some(area) = self.channel_area else {
-            return;
-        };
-
         let column = event.column;
         let row = event.row;
-        if column < area.x
-            || column >= area.x + area.width
-            || row < area.y
-            || row >= area.y + area.height
-        {
-            return;
+        match event.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                if let Some(area) = self
+                    .channel_area
+                    .filter(|area| rect_contains(*area, column, row))
+                {
+                    let list_row = row.saturating_sub(area.y);
+                    let index = self.channel_scroll_offset + usize::from(list_row);
+                    if index < self.rendered_channels {
+                        self.selected = index;
+                        self.focus = FocusPane::Channels;
+                    }
+                } else if let Some(area) = self
+                    .details_area
+                    .filter(|area| rect_contains(*area, column, row))
+                {
+                    self.focus = FocusPane::Details;
+                    self.details_cursor.point.line =
+                        self.details_scroll_offset + usize::from(row.saturating_sub(area.y));
+                    self.details_cursor.point.column = usize::from(column.saturating_sub(area.x));
+                } else if let Some(area) = self
+                    .latest_area
+                    .filter(|area| rect_contains(*area, column, row))
+                {
+                    self.focus = FocusPane::LatestValue;
+                    self.latest_cursor.point.line =
+                        self.latest_scroll_offset + usize::from(row.saturating_sub(area.y));
+                    self.latest_cursor.point.column = usize::from(column.saturating_sub(area.x));
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                if self
+                    .channel_area
+                    .is_some_and(|area| rect_contains(area, column, row))
+                {
+                    self.focus = FocusPane::Channels;
+                    self.move_channel_selection(1);
+                } else if self
+                    .latest_area
+                    .is_some_and(|area| rect_contains(area, column, row))
+                {
+                    self.focus = FocusPane::LatestValue;
+                    self.latest_cursor.move_down();
+                }
+            }
+            MouseEventKind::ScrollUp => {
+                if self
+                    .channel_area
+                    .is_some_and(|area| rect_contains(area, column, row))
+                {
+                    self.focus = FocusPane::Channels;
+                    self.move_channel_selection_up(1);
+                } else if self
+                    .latest_area
+                    .is_some_and(|area| rect_contains(area, column, row))
+                {
+                    self.focus = FocusPane::LatestValue;
+                    self.latest_cursor.move_up();
+                }
+            }
+            _ => {}
         }
+    }
 
-        let list_row = row.saturating_sub(area.y + 1);
-        let index = usize::from(list_row);
-        if index < self.rendered_channels {
-            self.selected = index;
-            self.focus = FocusPane::Channels;
-        }
+    pub fn set_channel_area(&mut self, area: Rect) {
+        self.channel_area = Some(area);
+        self.channel_view_rows = area.height as usize;
+        self.clamp_selection(self.rendered_channels);
+    }
+
+    pub fn set_details_area(&mut self, area: Rect) {
+        self.details_area = Some(area);
+    }
+
+    pub fn set_latest_area(&mut self, area: Rect) {
+        self.latest_area = Some(area);
+    }
+
+    pub fn clear_scroll_areas(&mut self) {
+        self.channel_area = None;
+        self.details_area = None;
+        self.latest_area = None;
+        self.channel_view_rows = 0;
     }
 
     fn focused_text_cursor_mut(&mut self) -> Option<&mut TextCursor> {
@@ -318,26 +530,97 @@ impl UiState {
     fn move_channel_selection(&mut self, amount: usize) {
         if self.rendered_channels > 0 {
             self.selected = cmp::min(self.selected + amount, self.rendered_channels - 1);
+            let view_rows = self.channel_view_rows.max(1);
+            if self.selected >= self.channel_scroll_offset + view_rows {
+                self.channel_scroll_offset = self.selected + 1 - view_rows;
+            }
         }
+    }
+
+    fn move_channel_selection_up(&mut self, amount: usize) {
+        self.selected = self.selected.saturating_sub(amount);
+        if self.selected < self.channel_scroll_offset {
+            self.channel_scroll_offset = self.selected;
+        }
+    }
+
+    fn filtered_channels<'a>(&self, snapshot: &'a StoreSnapshot) -> Vec<&'a ChannelSnapshot> {
+        let needle = self.filter_input.trim().to_ascii_lowercase();
+        snapshot
+            .channels
+            .iter()
+            .filter(|channel| {
+                if needle.is_empty() {
+                    true
+                } else {
+                    channel
+                        .descriptor
+                        .path
+                        .to_ascii_lowercase()
+                        .contains(&needle)
+                        || channel
+                            .descriptor
+                            .description
+                            .to_ascii_lowercase()
+                            .contains(&needle)
+                }
+            })
+            .collect()
+    }
+
+    fn tree_rows<'a>(&self, snapshot: &'a StoreSnapshot) -> Vec<TreeRow<'a>> {
+        build_tree_rows(self.filtered_channels(snapshot), &self.collapsed_namespaces)
+    }
+
+    fn selected_row<'a>(&self, snapshot: &'a StoreSnapshot) -> Option<TreeRow<'a>> {
+        let rows = self.tree_rows(snapshot);
+        rows.get(self.selected).cloned()
+    }
+
+    fn selected_row_key(&self, snapshot: &StoreSnapshot) -> Option<RowKey> {
+        self.selected_row(snapshot).map(|row| row_key(&row))
+    }
+
+    fn restore_selection(&mut self, snapshot: &StoreSnapshot, key: Option<RowKey>) {
+        let Some(key) = key else {
+            return;
+        };
+
+        let rows = self.tree_rows(snapshot);
+        if let Some(index) = rows.iter().position(|row| row_matches_key(row, &key)) {
+            self.selected = index;
+            return;
+        }
+
+        for fallback in ancestor_namespace_keys(&key) {
+            if let Some(index) = rows.iter().position(|row| row_matches_key(row, &fallback)) {
+                self.selected = index;
+                return;
+            }
+        }
+
+        self.clamp_selection(rows.len());
     }
 }
 
 pub fn selected_text(snapshot: &StoreSnapshot, ui: &UiState) -> Option<CopyPayload> {
-    let channel = ui.selected_channel(snapshot)?;
+    let row = ui.selected_row(snapshot)?;
+    let content = pane_content_for_row(&row, ui.filter_mode, &ui.filter_input);
+
     match ui.focus {
         FocusPane::Details => {
-            let lines = build_detail_lines(channel, ui.filter_mode, &ui.filter_input);
-            extract_copy_from_lines(&lines, &ui.details_cursor).map(|text| CopyPayload {
-                text,
-                label: "details selection".to_string(),
-            })
+            extract_copy_from_selectable_lines(&content.detail_lines, &ui.details_cursor).map(
+                |text| CopyPayload {
+                    text,
+                    label: "details line".to_string(),
+                },
+            )
         }
         FocusPane::LatestValue => {
-            let content = build_latest_pane_content(channel);
-            let lines = latest_selectable_lines(&content);
-            extract_copy_from_lines(&lines, &ui.latest_cursor).map(|text| CopyPayload {
+            let lines = latest_selectable_lines(&content.latest_content);
+            extract_copy_from_selectable_lines(&lines, &ui.latest_cursor).map(|text| CopyPayload {
                 text,
-                label: "latest selection".to_string(),
+                label: format!("{} line", content.latest_title.to_ascii_lowercase()),
             })
         }
         FocusPane::Channels => None,
@@ -345,6 +628,18 @@ pub fn selected_text(snapshot: &StoreSnapshot, ui: &UiState) -> Option<CopyPaylo
 }
 
 pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut UiState) {
+    if frame.area().width < MIN_TERMINAL_WIDTH || frame.area().height < MIN_TERMINAL_HEIGHT {
+        ui.clear_scroll_areas();
+        let message = Paragraph::new(format!(
+            "This window is too small.\nMinimum size: {}x{}",
+            MIN_TERMINAL_WIDTH, MIN_TERMINAL_HEIGHT
+        ))
+        .block(Block::default().title("prismo").borders(Borders::ALL))
+        .alignment(Alignment::Center);
+        frame.render_widget(message, frame.area());
+        return;
+    }
+
     let vertical = frame.area().width < 110;
     let (detail_area, channel_area, status_area) = if vertical {
         let root = Layout::default()
@@ -373,50 +668,32 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
         )
     };
 
-    let channels = ui.visible_channels(snapshot);
-    ui.clamp_selection(channels.len());
-    ui.channel_area = Some(channel_area);
+    let rows = ui.tree_rows(snapshot);
+    ui.clamp_selection(rows.len());
 
-    let mut list_state = ListState::default().with_selected(Some(ui.selected));
-    let items = channels
+    let mut list_state = ListState::default()
+        .with_selected(Some(ui.selected))
+        .with_offset(ui.channel_scroll_offset);
+    let items = rows
         .iter()
-        .map(|channel| {
-            let marker = if channel.is_stale { "stale" } else { "live" };
-            let value = channel
-                .latest
-                .as_ref()
-                .map(|sample| sample.value.short_display())
-                .unwrap_or_else(|| "waiting".to_string());
-            ListItem::new(Line::from(vec![
-                Span::styled(
-                    channel.descriptor.path.clone(),
-                    Style::default().fg(Color::Cyan),
-                ),
-                Span::raw(" "),
-                Span::styled(
-                    format!("[{marker}]"),
-                    Style::default().fg(if channel.is_stale {
-                        Color::Yellow
-                    } else {
-                        Color::Green
-                    }),
-                ),
-                Span::raw(" "),
-                Span::styled(value, Style::default().fg(Color::Gray)),
-            ]))
-        })
+        .map(|row| ListItem::new(render_tree_row(row)))
         .collect::<Vec<_>>();
 
     let list_block = Block::default()
-        .title(if ui.filter_mode {
-            "Channels / filter"
+        .title(if ui.filter_mode || !ui.filter_input.is_empty() {
+            "Channels / filtered"
         } else {
             "Channels"
         })
+        .title_top(Line::from("z toggle tree").right_aligned())
         .borders(Borders::ALL)
         .border_style(focus_style(ui.focus == FocusPane::Channels));
+    let channel_inner = list_block.inner(channel_area);
+    let (channel_list_area, channel_scrollbar_area) =
+        split_scrollable_area(channel_inner, rows.len());
+    ui.set_channel_area(channel_inner);
+    frame.render_widget(list_block, channel_area);
     let channel_list = List::new(items)
-        .block(list_block)
         .highlight_style(
             Style::default()
                 .bg(Color::DarkGray)
@@ -424,25 +701,27 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(">> ");
-    frame.render_stateful_widget(channel_list, channel_area, &mut list_state);
+    frame.render_stateful_widget(channel_list, channel_list_area, &mut list_state);
+    render_vertical_scrollbar(
+        frame,
+        channel_scrollbar_area,
+        rows.len(),
+        channel_list_area.height as usize,
+        ui.channel_scroll_offset,
+        ui.focus == FocusPane::Channels,
+    );
 
-    let text_cursor = if let Some(selected) = channels.get(ui.selected).copied() {
-        render_detail(frame, detail_area, selected, ui)
+    let mut cursor_position = if let Some(selected) = rows.get(ui.selected) {
+        render_selection_detail(frame, detail_area, selected, ui)
     } else {
+        ui.set_details_area(Rect::default());
+        ui.set_latest_area(Rect::default());
         let empty = Paragraph::new("No channels match the current filter.")
-            .block(
-                Block::default()
-                    .title("Channel Detail")
-                    .borders(Borders::ALL),
-            )
+            .block(Block::default().title("Selection").borders(Borders::ALL))
             .alignment(Alignment::Center);
         frame.render_widget(empty, detail_area);
         None
     };
-
-    if let Some(cursor) = text_cursor {
-        frame.set_cursor_position(cursor);
-    }
 
     let plugin_summary = snapshot
         .plugins
@@ -456,9 +735,13 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
         .unwrap_or_else(|| "plugin: connecting".to_string());
 
     let status_left = if let Some(notice) = ui.status_notice() {
-        format!("q quit  ? help  focus:{}  {}", ui.focus_label(), notice)
+        format!(
+            ":q quit  : command  ? help  focus:{}  {}",
+            ui.focus_label(),
+            notice
+        )
     } else {
-        format!("q quit  ? help  focus:{}", ui.focus_label())
+        format!(":q quit  : command  ? help  focus:{}", ui.focus_label())
     };
     let status_right = format!(
         "total:{} dropped:{}  {}",
@@ -478,56 +761,82 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
     frame.render_widget(left, status_chunks[0]);
     frame.render_widget(right, status_chunks[1]);
 
-    if ui.filter_mode {
-        let popup = centered_rect(60, 3, frame.area());
+    if ui.filter_mode || !ui.filter_input.is_empty() {
+        let popup = filter_bar_rect(frame.area(), ui.filter_input.chars().count() as u16);
         frame.render_widget(Clear, popup);
-        let filter = Paragraph::new(ui.filter_input.as_str())
+        let filter = Paragraph::new(format!("/{}", ui.filter_input))
             .block(Block::default().title("Filter").borders(Borders::ALL))
             .wrap(Wrap { trim: false });
         frame.render_widget(filter, popup);
+        if ui.filter_mode {
+            cursor_position = Some(Position::new(
+                popup.x + 2 + ui.filter_input.chars().count() as u16,
+                popup.y + 1,
+            ));
+        }
+    }
+
+    if ui.command_mode {
+        let popup = filter_bar_rect(frame.area(), ui.command_input.chars().count() as u16);
+        frame.render_widget(Clear, popup);
+        let command = Paragraph::new(format!(":{}", ui.command_input))
+            .block(Block::default().title("Command").borders(Borders::ALL))
+            .wrap(Wrap { trim: false });
+        frame.render_widget(command, popup);
+        cursor_position = Some(Position::new(
+            popup.x + 2 + ui.command_input.chars().count() as u16,
+            popup.y + 1,
+        ));
     }
 
     if ui.help_mode {
-        let popup = centered_rect(16, 74, frame.area());
+        let popup = centered_rect(18, 78, frame.area());
         frame.render_widget(Clear, popup);
         let help_lines = vec![
             Line::from("Navigation"),
             Line::from("Tab cycle focus between Details, Latest Value, and Channels"),
             Line::from(
-                "j/k move channel selection in Channels, or move cursor up/down in focused text panes",
+                "j/k move selection in Channels, or move cursor up/down in focused text panes",
             ),
             Line::from("h/l or Left/Right move cursor horizontally in focused text panes"),
-            Line::from("g/G jump to the first or last channel"),
+            Line::from("g/G jump to the first or last visible row"),
+            Line::from("Enter collapse or expand the selected namespace in Channels"),
+            Line::from("z toggle collapse or expand for the full channel tree"),
             Line::from(""),
             Line::from("Actions"),
             Line::from(
-                "y copy the current line in Details/Latest Value, or copy the live value in Channels",
+                "y copy the current line in Details or Latest Value, or copy the live value in Channels",
             ),
             Line::from("/ open channel filter"),
-            Line::from("Mouse click select a channel in the Channels pane"),
-            Line::from("Esc close filter or help"),
+            Line::from(": open command mode"),
+            Line::from(":q quit prismo"),
+            Line::from("Mouse click select a row in the Channels pane"),
+            Line::from("Esc close filter, command, or help"),
             Line::from("? toggle this help"),
-            Line::from("q quit prismo"),
         ];
         let help = Paragraph::new(help_lines)
             .block(Block::default().title("Help").borders(Borders::ALL))
             .wrap(Wrap { trim: false });
         frame.render_widget(help, popup);
     }
+
+    if let Some(cursor) = cursor_position {
+        frame.set_cursor_position(cursor);
+    }
 }
 
-fn render_detail(
+fn render_selection_detail(
     frame: &mut ratatui::Frame<'_>,
     area: Rect,
-    channel: &ChannelSnapshot,
+    row: &TreeRow<'_>,
     ui: &mut UiState,
 ) -> Option<Position> {
     let sections = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(8), Constraint::Min(5)])
+        .constraints([Constraint::Length(7), Constraint::Min(5)])
         .split(area);
 
-    let detail_lines = build_detail_lines(channel, ui.filter_mode, &ui.filter_input);
+    let content = pane_content_for_row(row, ui.filter_mode, &ui.filter_input);
     let detail_block = Block::default()
         .title("Details")
         .borders(Borders::ALL)
@@ -536,26 +845,28 @@ fn render_detail(
         ));
     let detail_inner = detail_block.inner(sections[0]);
     frame.render_widget(detail_block, sections[0]);
-    let detail_cursor = render_selectable_text(
+    ui.set_details_area(detail_inner);
+    let detail_cursor = render_fixed_selectable_text(
         frame,
         detail_inner,
-        &detail_lines,
+        &content.detail_lines,
         &mut ui.details_cursor,
         !ui.filter_mode && ui.focus == FocusPane::Details,
     );
 
-    let latest_content = build_latest_pane_content(channel);
     let latest_block = Block::default()
-        .title("Latest Value")
+        .title(content.latest_title.as_str())
         .borders(Borders::ALL)
         .border_style(focus_style(ui.focus == FocusPane::LatestValue));
     let latest_inner = latest_block.inner(sections[1]);
     frame.render_widget(latest_block, sections[1]);
+    ui.set_latest_area(latest_scroll_area(latest_inner, &content.latest_content));
     let latest_cursor = render_latest_value(
         frame,
         latest_inner,
-        &latest_content,
+        &content.latest_content,
         &mut ui.latest_cursor,
+        &mut ui.latest_scroll_offset,
         ui.focus == FocusPane::LatestValue,
     );
 
@@ -571,11 +882,12 @@ fn render_latest_value(
     area: Rect,
     content: &LatestPaneContent,
     cursor: &mut TextCursor,
+    scroll_offset: &mut usize,
     focused: bool,
 ) -> Option<Position> {
     match content {
         LatestPaneContent::Text(lines) => {
-            render_selectable_text(frame, area, lines, cursor, focused)
+            render_selectable_text(frame, area, lines, cursor, scroll_offset, focused)
         }
         LatestPaneContent::Numeric {
             summary,
@@ -589,7 +901,7 @@ fn render_latest_value(
                 .constraints([Constraint::Length(summary_height), Constraint::Min(0)])
                 .split(area);
             let cursor_position =
-                render_selectable_text(frame, sections[0], summary, cursor, focused);
+                render_selectable_text(frame, sections[0], summary, cursor, scroll_offset, focused);
 
             if sections[1].height > 0 {
                 let max_x = (points.len().saturating_sub(1) as f64).max(1.0);
@@ -620,7 +932,76 @@ fn render_latest_value(
 fn render_selectable_text(
     frame: &mut ratatui::Frame<'_>,
     area: Rect,
-    lines: &[String],
+    lines: &[SelectableLine],
+    cursor: &mut TextCursor,
+    scroll_offset: &mut usize,
+    focused: bool,
+) -> Option<Position> {
+    if area.width == 0 || area.height == 0 {
+        *scroll_offset = 0;
+        return None;
+    }
+
+    if lines.is_empty() {
+        *scroll_offset = 0;
+        frame.render_widget(Paragraph::new(String::new()), area);
+        return None;
+    }
+
+    let (text_area, scrollbar_area) = split_scrollable_area(area, lines.len());
+    clamp_selectable_cursor(cursor, lines);
+    let view_rows = text_area.height as usize;
+    let max_offset = lines.len().saturating_sub(view_rows);
+    *scroll_offset = (*scroll_offset).min(max_offset);
+    if cursor.point.line < *scroll_offset {
+        *scroll_offset = cursor.point.line;
+    } else if cursor.point.line >= *scroll_offset + view_rows {
+        *scroll_offset = cursor.point.line + 1 - view_rows;
+    }
+
+    let start = *scroll_offset;
+    let end = (start + view_rows).min(lines.len());
+    let visible_lines = &lines[start..end];
+    let visible_cursor = TextCursor {
+        point: TextPoint {
+            line: cursor.point.line.saturating_sub(start),
+            column: cursor.point.column,
+        },
+    };
+
+    let rendered = build_rendered_lines(visible_lines, &visible_cursor, focused);
+    frame.render_widget(
+        Paragraph::new(rendered).wrap(Wrap { trim: false }),
+        text_area,
+    );
+    render_vertical_scrollbar(
+        frame,
+        scrollbar_area,
+        lines.len(),
+        view_rows,
+        *scroll_offset,
+        focused,
+    );
+
+    if !focused {
+        return None;
+    }
+
+    let line = cmp::min(
+        visible_cursor.point.line as u16,
+        text_area.height.saturating_sub(1),
+    );
+    let col = cmp::min(
+        visible_cursor.point.column as u16,
+        text_area.width.saturating_sub(1),
+    );
+    Some(Position::new(text_area.x + col, text_area.y + line))
+}
+
+fn render_fixed_selectable_text(
+    frame: &mut ratatui::Frame<'_>,
+    area: Rect,
+    lines: &[SelectableLine],
     cursor: &mut TextCursor,
     focused: bool,
 ) -> Option<Position> {
@@ -628,8 +1009,14 @@ fn render_selectable_text(
         return None;
     }
 
-    clamp_cursor(cursor, lines);
-    let rendered = build_rendered_lines(lines, cursor, focused);
+    if lines.is_empty() {
+        frame.render_widget(Paragraph::new(String::new()), area);
+        return None;
+    }
+
+    let visible_lines = &lines[..lines.len().min(area.height as usize)];
+    clamp_selectable_cursor(cursor, visible_lines);
+    let rendered = build_rendered_lines(visible_lines, cursor, focused);
     frame.render_widget(Paragraph::new(rendered).wrap(Wrap { trim: false }), area);
 
     if !focused {
@@ -641,17 +1028,255 @@ fn render_selectable_text(
     Some(Position::new(area.x + col, area.y + line))
 }
 
+fn render_tree_row(row: &TreeRow<'_>) -> Line<'static> {
+    match &row.kind {
+        TreeRowKind::Namespace {
+            name,
+            descendant_channels,
+            collapsed,
+            ..
+        } => {
+            let indent = "  ".repeat(row.depth);
+            let icon = if *collapsed { "▸" } else { "▾" };
+            Line::from(vec![
+                Span::raw(indent),
+                Span::styled(format!("{icon} {name}"), Style::default().fg(Color::Yellow)),
+                Span::raw(" "),
+                Span::styled(
+                    format!("[{}]", descendant_channels.len()),
+                    Style::default().fg(Color::Gray),
+                ),
+            ])
+        }
+        TreeRowKind::Channel { channel } => {
+            let indent = "  ".repeat(row.depth);
+            let marker = if channel.is_stale { "stale" } else { "live" };
+            let value = channel
+                .latest
+                .as_ref()
+                .map(|sample| sample.value.short_display())
+                .unwrap_or_else(|| "waiting".to_string());
+            Line::from(vec![
+                Span::raw(indent),
+                Span::styled("• ", Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    channel.descriptor.display_name.clone(),
+                    Style::default().fg(Color::Cyan),
+                ),
+                Span::raw(" "),
+                Span::styled(
+                    format!("[{marker}]"),
+                    Style::default().fg(if channel.is_stale {
+                        Color::Yellow
+                    } else {
+                        Color::Green
+                    }),
+                ),
+                Span::raw(" "),
+                Span::styled(value, Style::default().fg(Color::Gray)),
+            ])
+        }
+    }
+}
+
+fn latest_scroll_area(area: Rect, content: &LatestPaneContent) -> Rect {
+    match content {
+        LatestPaneContent::Text(_) => area,
+        LatestPaneContent::Numeric { summary, .. } => {
+            let summary_height = cmp::min(area.height, summary.len() as u16 + 1);
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(summary_height), Constraint::Min(0)])
+                .split(area)[0]
+        }
+    }
+}
+
+fn split_scrollable_area(area: Rect, content_length: usize) -> (Rect, Option<Rect>) {
+    if content_length > area.height as usize && area.width > 1 {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(0), Constraint::Length(1)])
+            .split(area);
+        (chunks[0], Some(chunks[1]))
+    } else {
+        (area, None)
+    }
+}
+
+fn render_vertical_scrollbar(
+    frame: &mut ratatui::Frame<'_>,
+    area: Option<Rect>,
+    content_length: usize,
+    viewport_length: usize,
+    position: usize,
+    focused: bool,
+) {
+    let Some(area) = area else {
+        return;
+    };
+    if area.width == 0 || area.height == 0 || content_length <= viewport_length {
+        return;
+    }
+
+    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(None)
+        .end_symbol(None)
+        .track_symbol(Some("│"))
+        .thumb_style(if focused {
+            Style::default().fg(Color::LightCyan)
+        } else {
+            Style::default().fg(Color::Gray)
+        })
+        .track_style(Style::default().fg(Color::DarkGray));
+    let mut state = ScrollbarState::default()
+        .content_length(content_length)
+        .viewport_content_length(viewport_length)
+        .position(position);
+    frame.render_stateful_widget(scrollbar, area, &mut state);
+}
+
+fn pane_content_for_row(row: &TreeRow<'_>, filter_mode: bool, filter_input: &str) -> PaneContent {
+    match &row.kind {
+        TreeRowKind::Channel { channel } => PaneContent {
+            detail_lines: build_channel_detail_lines(channel, filter_mode, filter_input),
+            latest_title: "Latest Value".to_string(),
+            latest_content: build_channel_latest_content(channel),
+        },
+        TreeRowKind::Namespace {
+            path,
+            descendant_channels,
+            child_namespace_count,
+            direct_channel_count,
+            collapsed,
+            ..
+        } => PaneContent {
+            detail_lines: build_namespace_detail_lines(
+                path,
+                descendant_channels.len(),
+                *child_namespace_count,
+                *direct_channel_count,
+                *collapsed,
+                filter_mode,
+                filter_input,
+            ),
+            latest_title: "Channels".to_string(),
+            latest_content: LatestPaneContent::Text(build_namespace_variable_lines(
+                path,
+                descendant_channels,
+            )),
+        },
+    }
+}
+
+fn build_tree_rows<'a>(
+    channels: Vec<&'a ChannelSnapshot>,
+    collapsed_namespaces: &HashSet<String>,
+) -> Vec<TreeRow<'a>> {
+    let mut root = NamespaceNode::default();
+
+    for channel in channels {
+        let parts = channel.descriptor.path.split('.').collect::<Vec<_>>();
+
+        if parts.len() <= 1 {
+            root.channels.push(channel);
+            continue;
+        }
+
+        let mut node = &mut root;
+        let mut current_path = String::new();
+        for part in &parts[..parts.len() - 1] {
+            if !current_path.is_empty() {
+                current_path.push('.');
+            }
+            current_path.push_str(part);
+            node = node
+                .namespaces
+                .entry((*part).to_string())
+                .or_insert_with(|| NamespaceNode::new((*part).to_string(), current_path.clone()));
+        }
+        node.channels.push(channel);
+    }
+
+    let mut rows = Vec::new();
+    append_tree_rows(&root, 0, collapsed_namespaces, &mut rows);
+    rows
+}
+
+fn visible_namespace_paths(channels: Vec<&ChannelSnapshot>) -> HashSet<String> {
+    let mut paths = HashSet::new();
+    for channel in channels {
+        let mut current = String::new();
+        let parts = channel.descriptor.path.split('.').collect::<Vec<_>>();
+        for part in &parts[..parts.len().saturating_sub(1)] {
+            if !current.is_empty() {
+                current.push('.');
+            }
+            current.push_str(part);
+            paths.insert(current.clone());
+        }
+    }
+    paths
+}
+
+fn append_tree_rows<'a>(
+    node: &NamespaceNode<'a>,
+    depth: usize,
+    collapsed_namespaces: &HashSet<String>,
+    rows: &mut Vec<TreeRow<'a>>,
+) {
+    for namespace in node.namespaces.values() {
+        let mut descendant_channels = collect_descendant_channels(namespace);
+        descendant_channels.sort_by(|left, right| left.descriptor.path.cmp(&right.descriptor.path));
+        let collapsed = collapsed_namespaces.contains(&namespace.path);
+        rows.push(TreeRow {
+            depth,
+            kind: TreeRowKind::Namespace {
+                path: namespace.path.clone(),
+                name: namespace.name.clone(),
+                descendant_channels,
+                child_namespace_count: namespace.namespaces.len(),
+                direct_channel_count: namespace.channels.len(),
+                collapsed,
+            },
+        });
+        if !collapsed {
+            append_tree_rows(namespace, depth + 1, collapsed_namespaces, rows);
+        }
+    }
+
+    for channel in &node.channels {
+        rows.push(TreeRow {
+            depth,
+            kind: TreeRowKind::Channel { channel },
+        });
+    }
+}
+
+fn collect_descendant_channels<'a>(node: &NamespaceNode<'a>) -> Vec<&'a ChannelSnapshot> {
+    let mut channels = node.channels.clone();
+    for child in node.namespaces.values() {
+        channels.extend(collect_descendant_channels(child));
+    }
+    channels
+}
+
 fn build_rendered_lines(
-    lines: &[String],
+    lines: &[SelectableLine],
     cursor: &TextCursor,
     focused: bool,
 ) -> Vec<Line<'static>> {
-    let cursor = clamped_cursor(cursor, lines);
+    let cursor = clamped_selectable_cursor(cursor, lines);
     lines
         .iter()
         .enumerate()
         .map(|(line_idx, line)| {
-            let chars = line.chars().collect::<Vec<_>>();
+            let mut chars = Vec::new();
+            for span in &line.rendered.spans {
+                for ch in span.content.chars() {
+                    chars.push((ch, span.style));
+                }
+            }
             let mut spans = Vec::new();
 
             if chars.is_empty() {
@@ -668,13 +1293,13 @@ fn build_rendered_lines(
                 return Line::from(spans);
             }
 
-            for (col_idx, ch) in chars.iter().enumerate() {
+            for (col_idx, (ch, base_style)) in chars.iter().enumerate() {
                 let is_cursor =
                     focused && cursor.point.line == line_idx && cursor.point.column == col_idx;
                 let style = if is_cursor {
                     cursor_style()
                 } else {
-                    Style::default()
+                    *base_style
                 };
                 spans.push(Span::styled(ch.to_string(), style));
             }
@@ -688,48 +1313,107 @@ fn build_rendered_lines(
         .collect()
 }
 
-fn build_detail_lines(
+fn build_channel_detail_lines(
     channel: &ChannelSnapshot,
-    filter_mode: bool,
-    filter_input: &str,
-) -> Vec<String> {
+    _filter_mode: bool,
+    _filter_input: &str,
+) -> Vec<SelectableLine> {
     let latest = channel.latest.as_ref();
     let latest_value = latest
         .map(|sample| sample.value.to_string())
         .unwrap_or_else(|| "waiting for data".to_string());
-    let age = latest
+    let last_received = latest
         .map(|sample| format_duration(sample.timestamp.elapsed()))
+        .unwrap_or_else(|| "n/a".to_string());
+    let rate = channel
+        .rate_hz
+        .map(|rate| format!("{rate:.2} Hz"))
         .unwrap_or_else(|| "n/a".to_string());
 
     vec![
-        format!("Path: {}", channel.descriptor.path),
-        format!("Value: {latest_value}"),
-        format!(
-            "Unit: {}    Freshness: {}",
-            channel
-                .descriptor
-                .unit
-                .clone()
-                .unwrap_or_else(|| "-".to_string()),
-            if channel.is_stale { "stale" } else { "live" }
+        labeled_value_line("Path", &channel.descriptor.path, primary_style()),
+        SelectableLine {
+            raw: format!(
+                "{:<32}  Value: {}",
+                format!(
+                    "Updates: [{}] {}",
+                    if channel.is_stale { "stale" } else { "live" },
+                    channel.update_count
+                ),
+                latest_value
+            ),
+            rendered: Line::from(vec![
+                Span::styled("Updates: ", label_style()),
+                Span::styled(
+                    format!("[{}]", if channel.is_stale { "stale" } else { "live" }),
+                    status_style(channel.is_stale),
+                ),
+                Span::raw(" "),
+                Span::styled(channel.update_count.to_string(), value_style()),
+                Span::raw(
+                    " ".repeat(
+                        34usize.saturating_sub(
+                            format!(
+                                "Updates: [{}] {}",
+                                if channel.is_stale { "stale" } else { "live" },
+                                channel.update_count
+                            )
+                            .chars()
+                            .count(),
+                        ),
+                    ),
+                ),
+                Span::styled("Value: ", label_style()),
+                Span::styled(latest_value, value_style()),
+            ]),
+        },
+        detail_row(
+            "Type",
+            "channel",
+            "Unit",
+            channel.descriptor.unit.as_deref().unwrap_or("-"),
         ),
-        format!("Age: {age}    Updates: {}", channel.update_count),
-        format!("Notes: {}", channel.descriptor.description),
-        format!(
-            "Filter: {}",
-            if filter_mode && !filter_input.is_empty() {
-                filter_input.to_string()
-            } else {
-                "off".to_string()
-            }
-        ),
+        detail_row("Rate", &rate, "Last Received", &last_received),
+        labeled_value_line("Notes", &channel.descriptor.description, value_style()),
     ]
 }
 
-fn build_latest_pane_content(channel: &ChannelSnapshot) -> LatestPaneContent {
+fn build_namespace_detail_lines(
+    path: &str,
+    variable_count: usize,
+    child_namespace_count: usize,
+    direct_channel_count: usize,
+    collapsed: bool,
+    _filter_mode: bool,
+    _filter_input: &str,
+) -> Vec<SelectableLine> {
+    vec![
+        labeled_value_line("Path", path, primary_style()),
+        detail_row(
+            "Type",
+            "namespace",
+            "State",
+            if collapsed { "collapsed" } else { "expanded" },
+        ),
+        detail_row(
+            "Channels",
+            &variable_count.to_string(),
+            "Direct",
+            &direct_channel_count.to_string(),
+        ),
+        detail_row("Children", &child_namespace_count.to_string(), "", ""),
+        labeled_value_line("Notes", "Namespace summary", value_style()),
+    ]
+}
+
+fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent {
     let latest = channel.latest.as_ref();
-    let age = latest
+    let last_received = latest
         .map(|sample| format_duration(sample.timestamp.elapsed()))
+        .unwrap_or_else(|| "n/a".to_string());
+    let rate = channel
+        .rate_hz
+        .map(|rate| format!("{rate:.2} Hz"))
         .unwrap_or_else(|| "n/a".to_string());
 
     match latest.map(|sample| &sample.value) {
@@ -745,27 +1429,30 @@ fn build_latest_pane_content(channel: &ChannelSnapshot) -> LatestPaneContent {
                 })
                 .collect::<String>();
             LatestPaneContent::Text(vec![
-                format!(
-                    "HEX: {}",
-                    bytes
+                labeled_value_line(
+                    "HEX",
+                    &bytes
                         .iter()
                         .map(|byte| format!("{byte:02X}"))
                         .collect::<Vec<_>>()
-                        .join(" ")
+                        .join(" "),
+                    value_style(),
                 ),
-                format!("ASCII: {ascii}"),
+                labeled_value_line("ASCII", &ascii, value_style()),
             ])
         }
         Some(ChannelValue::Text(_))
         | Some(ChannelValue::Bool(_))
         | Some(ChannelValue::Integer(_)) => LatestPaneContent::Text(vec![
-            format!(
-                "Value: {}",
-                latest
+            labeled_value_line(
+                "Value",
+                &latest
                     .map(|sample| sample.value.to_string())
-                    .unwrap_or_default()
+                    .unwrap_or_default(),
+                value_style(),
             ),
-            format!("Age: {age}"),
+            labeled_value_line("Rate", &rate, value_style()),
+            labeled_value_line("Last Received", &last_received, value_style()),
         ]),
         Some(ChannelValue::Float(_)) if !channel.history.is_empty() => {
             let points = channel
@@ -777,58 +1464,151 @@ fn build_latest_pane_content(channel: &ChannelSnapshot) -> LatestPaneContent {
             let (min_y, max_y) = history_bounds(&channel.history);
             LatestPaneContent::Numeric {
                 summary: vec![
-                    format!(
-                        "Value: {}",
-                        latest
+                    labeled_value_line(
+                        "Value",
+                        &latest
                             .map(|sample| sample.value.to_string())
-                            .unwrap_or_default()
+                            .unwrap_or_default(),
+                        value_style(),
                     ),
-                    format!("Age: {age}"),
-                    format!("Samples: {}", channel.history.len()),
+                    labeled_value_line("Rate", &rate, value_style()),
+                    labeled_value_line("Last Received", &last_received, value_style()),
+                    labeled_value_line(
+                        "Samples",
+                        &channel.history.len().to_string(),
+                        value_style(),
+                    ),
                 ],
                 points,
                 min_y,
                 max_y,
             }
         }
-        _ => LatestPaneContent::Text(vec!["No detailed renderer for this value yet.".to_string()]),
+        _ => LatestPaneContent::Text(vec![plain_line("No detailed renderer for this value yet.")]),
     }
 }
 
-fn latest_selectable_lines(content: &LatestPaneContent) -> Vec<String> {
+fn build_namespace_variable_lines(
+    path: &str,
+    channels: &[&ChannelSnapshot],
+) -> Vec<SelectableLine> {
+    if channels.is_empty() {
+        return vec![plain_line("No variables in this namespace.")];
+    }
+
+    let mut sorted = channels.to_vec();
+    sorted.sort_by(|left, right| left.descriptor.path.cmp(&right.descriptor.path));
+    sorted
+        .into_iter()
+        .map(|channel| {
+            let relative = relative_channel_path(path, &channel.descriptor.path);
+            let marker = if channel.is_stale { "stale" } else { "live" };
+            let value = channel
+                .latest
+                .as_ref()
+                .map(|sample| sample.value.short_display())
+                .unwrap_or_else(|| "waiting".to_string());
+            let unit = channel
+                .descriptor
+                .unit
+                .as_ref()
+                .map(|unit| format!(" {unit}"))
+                .unwrap_or_default();
+            SelectableLine {
+                raw: format!("{relative} [{marker}] = {value}{unit}"),
+                rendered: Line::from(vec![
+                    Span::styled(relative, primary_style()),
+                    Span::raw(" "),
+                    Span::styled(format!("[{marker}]"), status_style(channel.is_stale)),
+                    Span::raw(" = "),
+                    Span::styled(value, value_style()),
+                    Span::styled(unit, muted_style()),
+                ]),
+            }
+        })
+        .collect()
+}
+
+fn latest_selectable_lines(content: &LatestPaneContent) -> Vec<SelectableLine> {
     match content {
         LatestPaneContent::Text(lines) => lines.clone(),
         LatestPaneContent::Numeric { summary, .. } => summary.clone(),
     }
 }
 
-fn extract_copy_from_lines(lines: &[String], cursor: &TextCursor) -> Option<String> {
+fn relative_channel_path(namespace_path: &str, full_path: &str) -> String {
+    let prefix = format!("{namespace_path}.");
+    full_path
+        .strip_prefix(&prefix)
+        .unwrap_or(full_path)
+        .to_string()
+}
+
+fn row_key(row: &TreeRow<'_>) -> RowKey {
+    match &row.kind {
+        TreeRowKind::Namespace { path, .. } => RowKey::Namespace(path.clone()),
+        TreeRowKind::Channel { channel } => RowKey::Channel(channel.descriptor.path.clone()),
+    }
+}
+
+fn row_matches_key(row: &TreeRow<'_>, key: &RowKey) -> bool {
+    match (&row.kind, key) {
+        (TreeRowKind::Namespace { path, .. }, RowKey::Namespace(target)) => path == target,
+        (TreeRowKind::Channel { channel }, RowKey::Channel(target)) => {
+            channel.descriptor.path == *target
+        }
+        _ => false,
+    }
+}
+
+fn ancestor_namespace_keys(key: &RowKey) -> Vec<RowKey> {
+    let path = match key {
+        RowKey::Namespace(path) => path.as_str(),
+        RowKey::Channel(path) => path.as_str(),
+    };
+    let parts = path.split('.').collect::<Vec<_>>();
+    let namespace_end = match key {
+        RowKey::Namespace(_) => parts.len(),
+        RowKey::Channel(_) => parts.len().saturating_sub(1),
+    };
+
+    let mut fallbacks = Vec::new();
+    for depth in (1..namespace_end).rev() {
+        fallbacks.push(RowKey::Namespace(parts[..depth].join(".")));
+    }
+    fallbacks
+}
+
+fn extract_copy_from_selectable_lines(
+    lines: &[SelectableLine],
+    cursor: &TextCursor,
+) -> Option<String> {
     if lines.is_empty() {
         return None;
     }
 
-    let cursor = clamped_cursor(cursor, lines);
-    Some(lines[cursor.point.line].clone())
+    let cursor = clamped_selectable_cursor(cursor, lines);
+    Some(lines[cursor.point.line].raw.clone())
 }
 
-fn clamp_cursor(cursor: &mut TextCursor, lines: &[String]) {
-    *cursor = clamped_cursor(cursor, lines);
+fn clamp_selectable_cursor(cursor: &mut TextCursor, lines: &[SelectableLine]) {
+    *cursor = clamped_selectable_cursor(cursor, lines);
 }
 
-fn clamped_cursor(cursor: &TextCursor, lines: &[String]) -> TextCursor {
+fn clamped_selectable_cursor(cursor: &TextCursor, lines: &[SelectableLine]) -> TextCursor {
     if lines.is_empty() {
         return TextCursor::default();
     }
 
     let mut clamped = cursor.clone();
-    clamp_point(&mut clamped.point, lines);
+    clamp_selectable_point(&mut clamped.point, lines);
     clamped
 }
 
-fn clamp_point(point: &mut TextPoint, lines: &[String]) {
+fn clamp_selectable_point(point: &mut TextPoint, lines: &[SelectableLine]) {
     let max_line = lines.len().saturating_sub(1);
     point.line = point.line.min(max_line);
-    let max_col = lines[point.line].chars().count();
+    let max_col = lines[point.line].raw.chars().count();
     point.column = point.column.min(max_col);
 }
 
@@ -838,6 +1618,107 @@ fn centered_rect(height: u16, width: u16, area: Rect) -> Rect {
         y: area.y + area.height.saturating_sub(height) / 2,
         width: width.min(area.width),
         height: height.min(area.height),
+    }
+}
+
+fn rect_contains(area: Rect, column: u16, row: u16) -> bool {
+    column >= area.x && column < area.x + area.width && row >= area.y && row < area.y + area.height
+}
+
+fn detail_row(
+    left_label: &str,
+    left_value: &str,
+    right_label: &str,
+    right_value: &str,
+) -> SelectableLine {
+    let left_cell = format!("{left_label}: {left_value}");
+    if right_label.is_empty() {
+        labeled_value_line(left_label, left_value, value_style())
+    } else {
+        let right_cell = format!("{right_label}: {right_value}");
+        let padding = 34usize.saturating_sub(left_cell.chars().count());
+        SelectableLine {
+            raw: format!("{left_cell:<32}  {right_cell}"),
+            rendered: Line::from(vec![
+                Span::styled(format!("{left_label}: "), label_style()),
+                styled_value_span(left_label, left_value),
+                Span::raw(" ".repeat(padding)),
+                Span::styled(format!("{right_label}: "), label_style()),
+                styled_value_span(right_label, right_value),
+            ]),
+        }
+    }
+}
+
+fn plain_line(text: &str) -> SelectableLine {
+    SelectableLine {
+        raw: text.to_string(),
+        rendered: Line::from(Span::raw(text.to_string())),
+    }
+}
+
+fn labeled_value_line(label: &str, value: &str, value_style: Style) -> SelectableLine {
+    SelectableLine {
+        raw: format!("{label}: {value}"),
+        rendered: Line::from(vec![
+            Span::styled(format!("{label}: "), label_style()),
+            Span::styled(value.to_string(), value_style),
+        ]),
+    }
+}
+
+fn label_style() -> Style {
+    Style::default().fg(Color::White)
+}
+
+fn primary_style() -> Style {
+    Style::default().fg(Color::Cyan)
+}
+
+fn value_style() -> Style {
+    Style::default().fg(Color::Gray)
+}
+
+fn muted_style() -> Style {
+    Style::default().fg(Color::DarkGray)
+}
+
+fn status_style(is_stale: bool) -> Style {
+    Style::default().fg(if is_stale {
+        Color::Yellow
+    } else {
+        Color::Green
+    })
+}
+
+fn styled_value_span(label: &str, value: &str) -> Span<'static> {
+    match label {
+        "Type" => Span::styled(
+            value.to_string(),
+            if value == "namespace" {
+                Style::default().fg(Color::Yellow)
+            } else {
+                primary_style()
+            },
+        ),
+        "Path" => Span::styled(value.to_string(), primary_style()),
+        "Value" => Span::styled(value.to_string(), value_style()),
+        "Unit" | "Rate" | "Last Received" | "Updates" | "Channels" | "Direct" | "Children"
+        | "Samples" | "Notes" => Span::styled(value.to_string(), value_style()),
+        "State" => Span::styled(value.to_string(), value_style()),
+        _ => Span::styled(value.to_string(), value_style()),
+    }
+}
+
+fn filter_bar_rect(area: Rect, input_width: u16) -> Rect {
+    let width = (input_width + 4).clamp(24, area.width.saturating_sub(2).max(24));
+    let height = 3.min(area.height);
+    let y = area.bottom().saturating_sub(height + 1);
+    Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y,
+        width: width.min(area.width),
+        height,
     }
 }
 
@@ -879,10 +1760,4 @@ fn history_bounds(history: &[f64]) -> (f64, f64) {
 
     let padding = (max - min) * 0.1;
     (min - padding, max + padding)
-}
-
-pub struct EmptyWidget;
-
-impl Widget for EmptyWidget {
-    fn render(self, _area: Rect, _buf: &mut Buffer) {}
 }

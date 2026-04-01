@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use crate::{ChannelDescriptor, ChannelSample, PluginHealth, PluginSnapshot, TelemetryUpdate};
 
 const HISTORY_LIMIT: usize = 64;
-const STALE_AFTER: Duration = Duration::from_secs(3);
+const INITIAL_STALE_AFTER: Duration = Duration::from_secs(3);
 
 #[derive(Clone, Debug)]
 pub struct ChannelSnapshot {
@@ -12,6 +12,7 @@ pub struct ChannelSnapshot {
     pub latest: Option<ChannelSample>,
     pub history: Vec<f64>,
     pub update_count: u64,
+    pub rate_hz: Option<f64>,
     pub is_stale: bool,
 }
 
@@ -29,6 +30,8 @@ struct ChannelState {
     latest: Option<ChannelSample>,
     numeric_history: VecDeque<f64>,
     update_count: u64,
+    last_interval: Option<Duration>,
+    rate_hz: Option<f64>,
 }
 
 impl ChannelState {
@@ -38,10 +41,21 @@ impl ChannelState {
             latest: None,
             numeric_history: VecDeque::with_capacity(HISTORY_LIMIT),
             update_count: 0,
+            last_interval: None,
+            rate_hz: None,
         }
     }
 
     fn apply_sample(&mut self, sample: ChannelSample) {
+        self.last_interval = self
+            .latest
+            .as_ref()
+            .and_then(|previous| sample.timestamp.checked_duration_since(previous.timestamp));
+        self.rate_hz = self.last_interval.and_then(|interval| {
+            let seconds = interval.as_secs_f64();
+            (seconds > 0.0).then_some(1.0 / seconds)
+        });
+
         if let Some(value) = sample.value.numeric_value() {
             if self.numeric_history.len() == HISTORY_LIMIT {
                 self.numeric_history.pop_front();
@@ -54,10 +68,14 @@ impl ChannelState {
     }
 
     fn snapshot(&self, now: Instant) -> ChannelSnapshot {
+        let stale_after = self
+            .last_interval
+            .map(|interval| interval.saturating_mul(3))
+            .unwrap_or(INITIAL_STALE_AFTER);
         let is_stale = self
             .latest
             .as_ref()
-            .map(|sample| now.saturating_duration_since(sample.timestamp) > STALE_AFTER)
+            .map(|sample| now.saturating_duration_since(sample.timestamp) > stale_after)
             .unwrap_or(true);
 
         ChannelSnapshot {
@@ -65,6 +83,7 @@ impl ChannelState {
             latest: self.latest.clone(),
             history: self.numeric_history.iter().copied().collect(),
             update_count: self.update_count,
+            rate_hz: self.rate_hz,
             is_stale,
         }
     }

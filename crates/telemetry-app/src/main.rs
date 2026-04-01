@@ -73,6 +73,10 @@ fn run_app(
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => match ui.on_key(key) {
                     UiAction::Quit => break,
+                    UiAction::RunCommand(command) => match command.as_str() {
+                        "q" | "quit" => break,
+                        _ => ui.set_status_notice(format!("unknown command: :{}", command)),
+                    },
                     UiAction::YankSelectedValue => {
                         if ui.focus == FocusPane::Channels {
                             if let Some(channel) = ui.selected_channel(&snapshot) {
@@ -97,6 +101,11 @@ fn run_app(
                                         ui.set_status_notice("selected channel has no value yet")
                                     }
                                 }
+                            } else if let Some(path) = ui.selected_namespace_path(&snapshot) {
+                                ui.set_status_notice(format!(
+                                    "namespace {} has no single live value to copy",
+                                    path
+                                ));
                             } else {
                                 ui.set_status_notice("no channel selected");
                             }
@@ -109,6 +118,21 @@ fn run_app(
                             }
                         } else {
                             ui.set_status_notice("nothing selected to copy");
+                        }
+                    }
+                    UiAction::ToggleSelectedNamespace => {
+                        if ui.toggle_selected_namespace(&snapshot) {
+                            ui.set_status_notice("toggled namespace");
+                        }
+                    }
+                    UiAction::ToggleAllNamespaces => {
+                        let (collapsed, count) = ui.toggle_all_namespaces(&snapshot);
+                        if count == 0 {
+                            ui.set_status_notice("no namespaces to toggle");
+                        } else if collapsed {
+                            ui.set_status_notice(format!("collapsed {} namespaces", count));
+                        } else {
+                            ui.set_status_notice(format!("expanded {} namespaces", count));
                         }
                     }
                     UiAction::None => {}

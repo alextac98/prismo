@@ -1,4 +1,6 @@
-# prismo
+# Prismo - A TUI Telemetry Viewer
+
+![prismo screenshot](./docs/AppScreenshot.png)
 
 `prismo` is a terminal telemetry viewer prototype written in Rust for embedded and target-side debugging.
 
@@ -11,14 +13,19 @@ The current prototype is intentionally small:
 ## Current State
 
 The app already supports:
+- a nested channel tree with collapsible namespaces
 - a channel list with live/stale markers
-- a detail pane for the selected channel
+- a fixed summary-style details pane for the selected item
 - numeric history as a line chart
 - bytes and text renderers
 - vim-like navigation
-- mouse channel selection
+- mouse selection and mouse-wheel scrolling in scrollable panes
+- scrollbars for scrollable panes
+- persistent `/` filter UI
+- a minimal `:` command mode with `:q`
 - copy/yank support using OSC 52 terminal clipboard sequences
 - a help overlay
+- a minimum supported window size with a fallback message
 
 The current source is synthetic only. Real source loading, decoder plugins, config files, and external plugin processes are not implemented yet.
 
@@ -54,15 +61,20 @@ cargo check
 The app shows a help overlay with `?`.
 
 The main shortcuts today are:
-- `q`: quit
+- `:q`: quit
+- `:`: open command mode
 - `?`: open or close help
 - `Tab`: cycle focus between `Details`, `Latest Value`, and `Channels`
 - `j/k`: move channel selection in `Channels`, or move the text cursor vertically in focused text panes
 - `h/l` or arrow keys: move the text cursor in focused text panes
 - `g/G`: jump to the first or last channel
-- `/`: filter channels
+- `Enter`: collapse or expand the selected namespace in `Channels`
+- `z`: toggle the whole channel tree collapsed or expanded
+- `/`: open the channel filter
 - `y`: copy the current line in `Details` or `Latest Value`, or copy the live channel value from `Channels`
-- mouse left click: select a channel
+- `Esc`: cancel filter input, command input, or help
+- mouse left click: focus/select within a pane
+- mouse wheel: scroll the hovered scrollable pane
 
 ## Status Bar
 
@@ -73,7 +85,7 @@ The status bar is split into two parts:
 Example:
 
 ```text
-q quit  ? help  focus:channels                                  total:42 dropped:0  synthetic updates:42 dropped:0
+:q quit  : command  ? help  focus:channels                      total:42 dropped:0  synthetic updates:42 dropped:0
 ```
 
 `total` is the number of update batches applied by the store. `synthetic updates` is the update count reported by the synthetic plugin itself.
@@ -86,6 +98,12 @@ The current plugin boundary is minimal:
 - the TUI renders store snapshots
 
 The synthetic plugin is the only implementation right now. It emits channel descriptors on startup and then periodically emits samples and plugin health.
+
+## Notes About Freshness
+
+`prismo` marks a channel stale using the most recent observed sample interval:
+- if the latest gap exceeds `3x` the last interval, the channel is stale
+- if there is only one sample so far, the app falls back to an initial `3s` threshold
 
 ## Next Likely Steps
 

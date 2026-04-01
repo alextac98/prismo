@@ -30,7 +30,10 @@ This crate owns:
 - pane layout
 - key and mouse handling
 - focused text cursor behavior
-- detail and latest-value rendering
+- details and latest-value rendering
+- channel tree expansion/collapse state
+- scroll offsets and scrollbar rendering
+- command/filter prompt rendering
 - status bar and help overlay
 
 It renders from `StoreSnapshot` only. It does not talk directly to plugins.
@@ -73,6 +76,7 @@ The store keeps:
 - latest sample per channel
 - recent numeric history for charting
 - per-channel update counts
+- the most recent observed inter-sample interval and derived rate
 - plugin health snapshots
 - total dropped updates caused by missing channel descriptors
 
@@ -81,7 +85,8 @@ The store keeps:
 Important current store rules:
 - channels are keyed by path in a `BTreeMap`
 - numeric history retention is capped at 64 samples
-- a channel is considered stale after 3 seconds without updates
+- staleness is adaptive: a channel is stale when time since last sample exceeds `3x` the most recent observed interval
+- channels with only one sample fall back to a `3s` initial stale threshold
 - `total_updates` counts applied update batches, not individual samples
 - `dropped_updates` increments if a sample arrives before its descriptor exists
 
@@ -110,25 +115,43 @@ The overall layout is:
 - wide terminals: details on the left, channels on the right, footer on the bottom
 - narrow terminals: details on top, channels below, footer on the bottom
 
+The current channels pane is a tree:
+- namespaces are derived from dot-separated channel paths
+- namespaces can be collapsed individually with `Enter`
+- the full tree can be toggled with `z`
+- selecting a namespace shows namespace summary details plus descendant channels in the left pane
+
 Renderers:
 - numeric values: line chart plus textual summary
 - text/integer/bool values: simple text block
 - bytes values: hex and ASCII summary
 
+The details pane is intentionally fixed-height and non-scrolling:
+- channel details render as a five-line summary block
+- namespace details use the same aligned two-column structure
+- latest-value content remains the scrollable/expanded pane for long payloads
+
 ## Input Model
 
 The input model is split by focus:
-- `Channels`: `j/k` and mouse choose the active channel
-- `Details` and `Latest Value`: cursor movement acts inside the text shown in that pane
+- `Channels`: `j/k`, mouse clicks, and mouse wheel choose the active row
+- `Details`: focusable and copyable line-by-line, but intentionally non-scrolling
+- `Latest Value`: cursor movement and mouse wheel act inside the visible text summary
 
 Copy behavior:
 - in `Channels`, `y` copies the current live channel value
 - in `Details` or `Latest Value`, `y` copies the current line under the text cursor
 
+Command/filter behavior:
+- `/` opens a persistent filter prompt; a non-empty filter remains visible until cleared
+- `Esc` while editing the filter clears it entirely
+- `:` opens command mode
+- `:q` is the current quit command
+
 ## Status and Help
 
 The status bar is intentionally compact:
-- left side: `q quit`, `? help`, current focus, and transient notices
+- left side: `:q quit`, `: command`, `? help`, current focus, and transient notices
 - right side: store totals and plugin health
 
 The help overlay is the canonical shortcut reference for the app.
@@ -142,3 +165,4 @@ The current implementation does not yet have:
 - tests
 - external process plugins
 - robust clipboard fallback behavior for terminals without OSC 52 support
+- responsive/truncated formatting for very large structured payloads beyond the current text renderers

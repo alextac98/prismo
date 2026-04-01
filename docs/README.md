@@ -12,6 +12,8 @@ This directory documents the current `prismo` prototype.
 These docs describe what exists in the repository now:
 - a Rust TUI prototype
 - a synthetic source plugin
-- a store-backed two-pane viewer
+- a store-backed viewer with a collapsible channel tree
+- fixed details plus scrollable latest-value content
+- vim-style filter and command prompts
 
 They do not describe a fully implemented external plugin system or production deployment flow yet.
