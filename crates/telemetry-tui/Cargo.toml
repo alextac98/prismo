@@ -1,0 +1,10 @@
+[package]
+name = "telemetry-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+crossterm.workspace = true
+ratatui.workspace = true
+telemetry-core = { path = "../telemetry-core" }

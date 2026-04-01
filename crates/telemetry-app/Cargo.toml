@@ -1,0 +1,16 @@
+[package]
+name = "prismo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+base64.workspace = true
+crossterm.workspace = true
+ratatui.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+telemetry-core = { path = "../telemetry-core" }
+telemetry-tui = { path = "../telemetry-tui" }
