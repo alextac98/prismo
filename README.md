@@ -5,10 +5,10 @@
 `prismo` is a terminal telemetry viewer prototype written in Rust for embedded and target-side debugging.
 
 The current prototype is intentionally small:
-- a Bazel-first Rust workspace with a TUI app, core telemetry model, runtime source API, and synthetic data source
+- a Bazel-first Rust workspace with a TUI app, core telemetry model, and synthetic data source
 - a two-pane telemetry UI built with `ratatui` and `crossterm`
 - a stub `SourcePlugin` implementation that generates randomized telemetry so the UI can be developed without a live target
-- a crate split that keeps telemetry contracts separate from runtime/plugin concerns
+- a workspace split that keeps app wiring, UI, and telemetry contracts separate
 
 ## Current State
 
@@ -31,11 +31,10 @@ The current source is synthetic only. Real source loading, decoder plugins, conf
 
 ## Workspace Layout
 
-- `crates/telemetry-app`: the `prismo` binary and runtime loop
-- `crates/telemetry-core`: telemetry data model and store
-- `crates/telemetry-runtime`: Rust source/plugin trait and runtime types
-- `crates/telemetry-synthetic`: synthetic source implementation
-- `crates/telemetry-tui`: layout, rendering, input handling, and help UI
+- `apps/prismo`: the `prismo` binary and runtime loop
+- `crates/core`: telemetry data model, store, and Rust `SourcePlugin` contract
+- `crates/tui`: layout, rendering, input handling, and help UI
+- `plugins/synthetic`: synthetic source implementation
 - `docs/`: project documentation
 
 ## Build and Run
@@ -97,12 +96,12 @@ Example:
 ## Plugin Model Today
 
 The current plugin boundary is minimal:
-- `telemetry-runtime` defines `SourcePlugin`
+- `core` defines `SourcePlugin`
 - `SourcePlugin` produces `TelemetryUpdate` messages
 - the app pushes those updates into `TelemetryStore`
 - the TUI renders store snapshots
 
-The synthetic source in `crates/telemetry-synthetic` is the only implementation right now. It emits channel descriptors on startup and then periodically emits samples and plugin health.
+The synthetic source in `plugins/synthetic` is the only implementation right now. It emits channel descriptors on startup and then periodically emits samples and plugin health.
 
 ## Notes About Freshness
 

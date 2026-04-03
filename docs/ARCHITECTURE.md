@@ -4,15 +4,15 @@
 
 `prismo` is structured as a small Rust workspace with a clear split between:
 - telemetry ingestion and modeling
-- runtime source/plugin contracts
 - TUI rendering and interaction
 - application runtime wiring
+- built-in plugin implementations
 
 The current architecture is intentionally simple but already shaped around a plugin boundary.
 
 ## Crates
 
-## `crates/telemetry-core`
+## `crates/core`
 
 This crate owns the core telemetry concepts:
 - `ChannelDescriptor`
@@ -21,22 +21,16 @@ This crate owns the core telemetry concepts:
 - `TelemetryUpdate`
 - `PluginHealth`
 - `TelemetryStore`
-
-It does not own plugin/runtime concerns anymore.
-
-## `crates/telemetry-runtime`
-
-This crate owns the Rust runtime source boundary:
 - `SourcePlugin`
 - `PluginHandle`
 
-It is intentionally small so it can be replaced or bypassed later by a process-based plugin host.
+It owns both the telemetry contract and the current in-process Rust source-plugin boundary.
 
-## `crates/telemetry-synthetic`
+## `plugins/synthetic`
 
 This crate contains the current synthetic source implementation.
 
-## `crates/telemetry-tui`
+## `crates/tui`
 
 This crate owns:
 - pane layout
@@ -50,7 +44,7 @@ This crate owns:
 
 It renders from `StoreSnapshot` only. It does not talk directly to plugins.
 
-## `crates/telemetry-app`
+## `apps/prismo`
 
 This crate is the executable:
 - selects and spawns a source implementation
@@ -65,12 +59,12 @@ This crate is the executable:
 The current runtime looks like this:
 
 ```text
-SyntheticPlugin -> SourcePlugin -> mpsc::Sender<TelemetryUpdate> -> telemetry-app -> TelemetryStore -> StoreSnapshot -> telemetry-tui
+SyntheticPlugin -> SourcePlugin -> mpsc::Sender<TelemetryUpdate> -> app -> TelemetryStore -> StoreSnapshot -> tui
 ```
 
 Detailed flow:
 1. The app creates a bounded Tokio MPSC channel.
-2. The app constructs the synthetic source and spawns it through the `telemetry-runtime` trait.
+2. The app constructs the synthetic source and spawns it through the `core` `SourcePlugin` trait.
 3. The main loop drains pending updates with `try_recv`.
 4. The store applies descriptors, samples, and plugin health.
 5. The TUI renders from the latest snapshot.
@@ -122,7 +116,7 @@ Bazel is the primary build system:
 - `MODULE.bazel` pins the Bazel module graph
 - `rules_rust` provides the hermetic Rust toolchain
 - `crate_universe` reads the Cargo workspace metadata and resolves external Rust crates for Bazel
-- each crate has its own `BUILD.bazel`
+- each workspace package has its own `BUILD.bazel`
 
 Cargo manifests remain in the repo as dependency metadata and editor/tooling support, not as the primary execution path.
 

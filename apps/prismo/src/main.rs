@@ -9,12 +9,11 @@ use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
+use prismo_core::{SourcePlugin, TelemetryStore};
+use prismo_synthetic::SyntheticPlugin;
+use prismo_tui::{FocusPane, UiAction, UiState, selected_text};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use telemetry_core::TelemetryStore;
-use telemetry_runtime::SourcePlugin;
-use telemetry_synthetic::SyntheticPlugin;
-use telemetry_tui::{FocusPane, UiAction, UiState, selected_text};
 use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
 
@@ -57,7 +56,7 @@ fn main() -> Result<()> {
 
 fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    rx: &mut mpsc::Receiver<telemetry_core::TelemetryUpdate>,
+    rx: &mut mpsc::Receiver<prismo_core::TelemetryUpdate>,
 ) -> Result<()> {
     let tick_rate = Duration::from_millis(100);
     let mut store = TelemetryStore::new();
@@ -69,7 +68,7 @@ fn run_app(
         }
 
         let snapshot = store.snapshot();
-        terminal.draw(|frame| telemetry_tui::draw(frame, &snapshot, &mut ui))?;
+        terminal.draw(|frame| prismo_tui::draw(frame, &snapshot, &mut ui))?;
 
         if event::poll(tick_rate)? {
             match event::read()? {

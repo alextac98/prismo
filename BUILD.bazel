@@ -5,5 +5,5 @@ exports_files([
 
 alias(
     name = "prismo",
-    actual = "//crates/telemetry-app:prismo",
+    actual = "//apps/prismo:prismo",
 )

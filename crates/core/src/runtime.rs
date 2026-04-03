@@ -1,7 +1,8 @@
 use anyhow::Result;
-use telemetry_core::TelemetryUpdate;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+
+use crate::TelemetryUpdate;
 
 pub type PluginHandle = JoinHandle<Result<()>>;
 

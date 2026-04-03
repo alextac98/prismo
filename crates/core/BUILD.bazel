@@ -1,15 +1,17 @@
+load("@crates//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 rust_library(
-    name = "telemetry_core",
+    name = "core",
     srcs = glob(["src/**/*.rs"]),
-    crate_name = "telemetry_core",
+    crate_name = "prismo_core",
     edition = "2024",
     visibility = ["//visibility:public"],
+    deps = all_crate_deps(normal = True),
 )
 
 rust_test(
-    name = "telemetry_core_test",
-    crate = ":telemetry_core",
+    name = "core_test",
+    crate = ":core",
     edition = "2024",
 )

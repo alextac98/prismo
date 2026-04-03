@@ -1,10 +1,9 @@
 [workspace]
 members = [
-    "crates/telemetry-core",
-    "crates/telemetry-runtime",
-    "crates/telemetry-synthetic",
-    "crates/telemetry-tui",
-    "crates/telemetry-app",
+    "crates/core",
+    "crates/tui",
+    "apps/prismo",
+    "plugins/synthetic",
 ]
 resolver = "2"
 

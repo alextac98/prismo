@@ -6,10 +6,9 @@ rust_binary(
     srcs = glob(["src/**/*.rs"]),
     edition = "2024",
     deps = all_crate_deps(normal = True) + [
-        "//crates/telemetry-core:telemetry_core",
-        "//crates/telemetry-runtime:telemetry_runtime",
-        "//crates/telemetry-synthetic:telemetry_synthetic",
-        "//crates/telemetry-tui:telemetry_tui",
+        "//crates/core:core",
+        "//plugins/synthetic:synthetic",
+        "//crates/tui:tui",
     ],
     visibility = ["//visibility:public"],
 )

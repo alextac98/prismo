@@ -55,9 +55,8 @@ That means:
 ## Add a New Source Plugin
 
 Start by deciding which boundary you need:
-- `crates/telemetry-core` for shared telemetry types and store behavior
-- `crates/telemetry-runtime` for the Rust source trait
-- `crates/telemetry-synthetic` for an example in-process source implementation
+- `crates/core` for shared telemetry types, store behavior, and the Rust `SourcePlugin` trait
+- `plugins/synthetic` for an example in-process source implementation
 
 For a new Rust source:
 - implement `SourcePlugin`
@@ -65,11 +64,11 @@ For a new Rust source:
 - send descriptors before samples that reference them
 - include `PluginHealth` if you want footer statistics
 
-Right now the app directly instantiates `SyntheticPlugin` in `crates/telemetry-app/src/main.rs`. Replacing that with source selection is the next logical step.
+Right now the app directly instantiates `SyntheticPlugin` in `apps/prismo/src/main.rs`. Replacing that with source selection is the next logical step.
 
 ## Add New Renderers
 
-Add rendering logic in `crates/telemetry-tui/src/lib.rs`.
+Add rendering logic in `crates/tui/src/lib.rs`.
 
 The current renderer split is by `ChannelValue`:
 - bytes -> hex/ASCII block
@@ -86,7 +85,7 @@ If you add richer value kinds later, this is where new pane renderers should go.
 
 ## Evolve The Data Model
 
-If you need more telemetry semantics, start in `crates/telemetry-core/src/model.rs`.
+If you need more telemetry semantics, start in `crates/core/src/model.rs`.
 
 Likely future expansions:
 - enums with labels

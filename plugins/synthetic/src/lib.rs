@@ -1,10 +1,8 @@
 use std::time::{Duration, Instant};
 
+use prismo_core::{ChannelDescriptor, ChannelSample, ChannelValue, PluginHealth, TelemetryUpdate};
+use prismo_core::{PluginHandle, SourcePlugin};
 use rand::Rng;
-use telemetry_core::{
-    ChannelDescriptor, ChannelSample, ChannelValue, PluginHealth, TelemetryUpdate,
-};
-use telemetry_runtime::{PluginHandle, SourcePlugin};
 use tokio::sync::mpsc;
 use tokio::time;
 

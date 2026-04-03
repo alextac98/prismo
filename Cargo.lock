@@ -434,13 +434,38 @@ dependencies = [
  "anyhow",
  "base64",
  "crossterm 0.29.0",
+ "prismo-core",
+ "prismo-synthetic",
+ "prismo-tui",
  "ratatui",
- "telemetry-core",
- "telemetry-runtime",
- "telemetry-synthetic",
- "telemetry-tui",
  "tokio",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "prismo-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tokio",
+]
+
+[[package]]
+name = "prismo-synthetic"
+version = "0.1.0"
+dependencies = [
+ "prismo-core",
+ "rand",
+ "tokio",
+]
+
+[[package]]
+name = "prismo-tui"
+version = "0.1.0"
+dependencies = [
+ "crossterm 0.29.0",
+ "prismo-core",
+ "ratatui",
 ]
 
 [[package]]
@@ -691,38 +716,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "telemetry-core"
-version = "0.1.0"
-
-[[package]]
-name = "telemetry-runtime"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "telemetry-core",
- "tokio",
-]
-
-[[package]]
-name = "telemetry-synthetic"
-version = "0.1.0"
-dependencies = [
- "rand",
- "telemetry-core",
- "telemetry-runtime",
- "tokio",
-]
-
-[[package]]
-name = "telemetry-tui"
-version = "0.1.0"
-dependencies = [
- "crossterm 0.29.0",
- "ratatui",
- "telemetry-core",
 ]
 
 [[package]]

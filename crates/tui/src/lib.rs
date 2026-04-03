@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use prismo_core::{ChannelSnapshot, ChannelValue, StoreSnapshot};
 use ratatui::layout::{Constraint, Direction, Layout, Position, Rect};
 use ratatui::prelude::{Alignment, Color, Line, Modifier, Style};
 use ratatui::symbols;
@@ -11,7 +12,6 @@ use ratatui::widgets::{
     Axis, Block, Borders, Chart, Clear, Dataset, GraphType, List, ListItem, ListState, Paragraph,
     Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap,
 };
-use telemetry_core::{ChannelSnapshot, ChannelValue, StoreSnapshot};
 
 const MIN_TERMINAL_WIDTH: u16 = 80;
 const MIN_TERMINAL_HEIGHT: u16 = 20;
