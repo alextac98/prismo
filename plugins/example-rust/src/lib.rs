@@ -105,11 +105,11 @@ impl SyntheticChannelSpec {
     }
 }
 
-pub struct SyntheticPlugin {
+pub struct ExampleRustPlugin {
     period: Duration,
 }
 
-impl SyntheticPlugin {
+impl ExampleRustPlugin {
     pub fn new(period: Duration) -> Self {
         Self { period }
     }
@@ -993,15 +993,15 @@ impl SyntheticPlugin {
     }
 }
 
-impl Default for SyntheticPlugin {
+impl Default for ExampleRustPlugin {
     fn default() -> Self {
         Self::new(Duration::from_millis(200))
     }
 }
 
-impl SourcePlugin for SyntheticPlugin {
+impl SourcePlugin for ExampleRustPlugin {
     fn id(&self) -> &'static str {
-        "synthetic"
+        "example-rust"
     }
 
     fn spawn(self: Box<Self>, tx: mpsc::Sender<TelemetryUpdate>) -> PluginHandle {

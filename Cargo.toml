@@ -3,7 +3,7 @@ members = [
     "crates/core",
     "crates/tui",
     "apps/prismo",
-    "plugins/synthetic",
+    "plugins/example-rust",
 ]
 resolver = "2"
 

@@ -167,7 +167,7 @@ mod tests {
         let mut store = TelemetryStore::new();
 
         store.apply_update(TelemetryUpdate {
-            plugin_id: "synthetic".to_string(),
+            plugin_id: "example-rust".to_string(),
             descriptors: Vec::new(),
             samples: vec![sample("power.battery.voltage", 27.2, Instant::now(), 1)],
             health: None,
@@ -186,7 +186,7 @@ mod tests {
         let start = Instant::now();
 
         store.apply_update(TelemetryUpdate {
-            plugin_id: "synthetic".to_string(),
+            plugin_id: "example-rust".to_string(),
             descriptors: vec![descriptor("power.battery.voltage", Some("V"))],
             samples: vec![sample("power.battery.voltage", 27.2, start, 1)],
             health: Some(PluginHealth {
@@ -196,7 +196,7 @@ mod tests {
             }),
         });
         store.apply_update(TelemetryUpdate {
-            plugin_id: "synthetic".to_string(),
+            plugin_id: "example-rust".to_string(),
             descriptors: Vec::new(),
             samples: vec![sample(
                 "power.battery.voltage",
@@ -220,7 +220,7 @@ mod tests {
         let plugin = snapshot
             .plugins
             .iter()
-            .find(|plugin| plugin.plugin_id == "synthetic")
+            .find(|plugin| plugin.plugin_id == "example-rust")
             .expect("plugin snapshot");
 
         assert_eq!(snapshot.total_updates, 2);

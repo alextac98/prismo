@@ -10,7 +10,7 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use prismo_core::{SourcePlugin, TelemetryStore};
-use prismo_synthetic::SyntheticPlugin;
+use prismo_example_rust::ExampleRustPlugin;
 use prismo_tui::{FocusPane, UiAction, UiState, selected_text};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -28,7 +28,7 @@ fn main() -> Result<()> {
         .build()?;
 
     let (tx, mut rx) = mpsc::channel(64);
-    let plugin = Box::new(SyntheticPlugin::default());
+    let plugin = Box::new(ExampleRustPlugin::default());
     let runtime_guard = runtime.enter();
     let _plugin_handle = plugin.spawn(tx);
     drop(runtime_guard);

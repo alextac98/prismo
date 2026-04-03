@@ -56,7 +56,7 @@ That means:
 
 Start by deciding which boundary you need:
 - `crates/core` for shared telemetry types, store behavior, and the Rust `SourcePlugin` trait
-- `plugins/synthetic` for an example in-process source implementation
+- `plugins/example-rust` for an example in-process Rust source implementation
 
 For a new Rust source:
 - implement `SourcePlugin`
@@ -64,7 +64,7 @@ For a new Rust source:
 - send descriptors before samples that reference them
 - include `PluginHealth` if you want footer statistics
 
-Right now the app directly instantiates `SyntheticPlugin` in `apps/prismo/src/main.rs`. Replacing that with source selection is the next logical step.
+Right now the app directly instantiates `ExampleRustPlugin` in `apps/prismo/src/main.rs`. Replacing that with source selection is the next logical step.
 
 ## Add New Renderers
 

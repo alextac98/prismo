@@ -12,5 +12,5 @@ ratatui.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
 prismo-core = { path = "../../crates/core" }
-prismo-synthetic = { path = "../../plugins/synthetic" }
+prismo-example-rust = { path = "../../plugins/example-rust" }
 prismo-tui = { path = "../../crates/tui" }

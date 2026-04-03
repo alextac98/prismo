@@ -7,7 +7,7 @@ rust_binary(
     edition = "2024",
     deps = all_crate_deps(normal = True) + [
         "//crates/core:core",
-        "//plugins/synthetic:synthetic",
+        "//plugins/example-rust:example_rust",
         "//crates/tui:tui",
     ],
     visibility = ["//visibility:public"],

@@ -5,7 +5,7 @@
 `prismo` is a terminal telemetry viewer prototype written in Rust for embedded and target-side debugging.
 
 The current prototype is intentionally small:
-- a Bazel-first Rust workspace with a TUI app, core telemetry model, and synthetic data source
+- a Bazel-first Rust workspace with a TUI app, core telemetry model, and a Rust example plugin
 - a two-pane telemetry UI built with `ratatui` and `crossterm`
 - a stub `SourcePlugin` implementation that generates randomized telemetry so the UI can be developed without a live target
 - a workspace split that keeps app wiring, UI, and telemetry contracts separate
@@ -27,14 +27,14 @@ The app already supports:
 - a help overlay
 - a minimum supported window size with a fallback message
 
-The current source is synthetic only. Real source loading, decoder plugins, config files, and external plugin processes are not implemented yet.
+The current source is the Rust example plugin only. Real source loading, decoder plugins, config files, and external plugin processes are not implemented yet.
 
 ## Workspace Layout
 
 - `apps/prismo`: the `prismo` binary and runtime loop
 - `crates/core`: telemetry data model, store, and Rust `SourcePlugin` contract
 - `crates/tui`: layout, rendering, input handling, and help UI
-- `plugins/synthetic`: synthetic source implementation
+- `plugins/example-rust`: Rust example plugin implementation
 - `docs/`: project documentation
 
 ## Build and Run
@@ -88,10 +88,10 @@ The status bar is split into two parts:
 Example:
 
 ```text
-:q quit  : command  ? help  focus:channels                      total:42 dropped:0  synthetic updates:42 dropped:0
+:q quit  : command  ? help  focus:channels                      total:42 dropped:0  example-rust updates:42 dropped:0
 ```
 
-`total` is the number of update batches applied by the store. `synthetic updates` is the update count reported by the synthetic plugin itself.
+`total` is the number of update batches applied by the store. `example-rust updates` is the update count reported by the example plugin itself.
 
 ## Plugin Model Today
 
@@ -101,7 +101,7 @@ The current plugin boundary is minimal:
 - the app pushes those updates into `TelemetryStore`
 - the TUI renders store snapshots
 
-The synthetic source in `plugins/synthetic` is the only implementation right now. It emits channel descriptors on startup and then periodically emits samples and plugin health.
+The example source in `plugins/example-rust` is the only implementation right now. It emits channel descriptors on startup and then periodically emits samples and plugin health.
 
 ## Notes About Freshness
 

@@ -26,9 +26,9 @@ This crate owns the core telemetry concepts:
 
 It owns both the telemetry contract and the current in-process Rust source-plugin boundary.
 
-## `plugins/synthetic`
+## `plugins/example-rust`
 
-This crate contains the current synthetic source implementation.
+This crate contains the current Rust example source implementation.
 
 ## `crates/tui`
 
@@ -59,12 +59,12 @@ This crate is the executable:
 The current runtime looks like this:
 
 ```text
-SyntheticPlugin -> SourcePlugin -> mpsc::Sender<TelemetryUpdate> -> app -> TelemetryStore -> StoreSnapshot -> tui
+ExampleRustPlugin -> SourcePlugin -> mpsc::Sender<TelemetryUpdate> -> app -> TelemetryStore -> StoreSnapshot -> tui
 ```
 
 Detailed flow:
 1. The app creates a bounded Tokio MPSC channel.
-2. The app constructs the synthetic source and spawns it through the `core` `SourcePlugin` trait.
+2. The app constructs the example Rust source and spawns it through the `core` `SourcePlugin` trait.
 3. The main loop drains pending updates with `try_recv`.
 4. The store applies descriptors, samples, and plugin health.
 5. The TUI renders from the latest snapshot.
@@ -103,7 +103,7 @@ Today the plugin model is source-only:
 - it is responsible for spawning its own async task
 - it emits `TelemetryUpdate` batches
 
-The synthetic plugin sends:
+The example Rust plugin sends:
 - descriptors on the first update
 - randomized sample values on each interval tick
 - plugin health containing `emitted_updates`

@@ -435,7 +435,7 @@ dependencies = [
  "base64",
  "crossterm 0.29.0",
  "prismo-core",
- "prismo-synthetic",
+ "prismo-example-rust",
  "prismo-tui",
  "ratatui",
  "tokio",
@@ -451,7 +451,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "prismo-synthetic"
+name = "prismo-example-rust"
 version = "0.1.0"
 dependencies = [
  "prismo-core",

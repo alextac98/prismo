@@ -11,7 +11,7 @@ This directory documents the current `prismo` prototype.
 
 These docs describe what exists in the repository now:
 - a Bazel-built Rust TUI prototype
-- a synthetic source crate
+- a Rust example source crate
 - a store-backed viewer with a collapsible channel tree
 - fixed details plus scrollable latest-value content
 - vim-style filter and command prompts
