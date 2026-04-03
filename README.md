@@ -57,6 +57,19 @@ bazel build //...
 bazel test //...
 ```
 
+Format and check formatting:
+
+```bash
+bazel run //:format
+bazel run //:format.check
+```
+
+Rust compile checks:
+
+```bash
+bazel build //...
+```
+
 Cargo manifests are still present because `rules_rust` `crate_universe` reads the workspace dependency graph from [Cargo.toml](/Users/alex/code/alextac98/prismo/Cargo.toml) and [Cargo.lock](/Users/alex/code/alextac98/prismo/Cargo.lock).
 
 ## Controls

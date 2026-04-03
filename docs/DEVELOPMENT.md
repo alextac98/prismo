@@ -15,17 +15,29 @@ bazel build //...
 bazel test //...
 ```
 
+Format the workspace:
+
+```bash
+bazel run //:format
+```
+
+Check formatting without rewriting files:
+
+```bash
+bazel run //:format.check
+```
+
+Run the Rust compile-check workflow:
+
+```bash
+bazel build //...
+```
+
 Dependency updates still flow through the Cargo workspace metadata that Bazel consumes through `crate_universe`:
 
 ```bash
 cargo generate-lockfile
 CARGO_BAZEL_REPIN=1 bazel sync --only=crates
-```
-
-Formatting is still simplest through:
-
-```bash
-cargo fmt
 ```
 
 ## Current Interaction Model

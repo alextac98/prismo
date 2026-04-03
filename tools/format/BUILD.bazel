@@ -1,0 +1,5 @@
+alias(
+    name = "rustfmt",
+    actual = "@rules_rust//tools/upstream_wrapper:rustfmt",
+    visibility = ["//visibility:public"],
+)

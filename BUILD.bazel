@@ -1,7 +1,23 @@
+load("@aspect_rules_lint//format:defs.bzl", "format_multirun")
+
 exports_files([
     "Cargo.lock",
     "Cargo.toml",
 ])
+
+format_multirun(
+    name = "format",
+    rust = "//tools/format:rustfmt",
+    rust_check_args = [
+        "--edition",
+        "2024",
+        "--check",
+    ],
+    rust_fix_args = [
+        "--edition",
+        "2024",
+    ],
+)
 
 alias(
     name = "prismo",
