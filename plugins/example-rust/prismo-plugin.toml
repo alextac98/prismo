@@ -1,0 +1,9 @@
+schema_version = 1
+plugin_id = "example-rust"
+display_name = "Example Rust Plugin"
+plugin_version = "0.1.0"
+protocol_version = 1
+language = "rust"
+
+[entrypoint]
+argv = ["__PRISMO_SELF__", "plugin", "example-rust"]

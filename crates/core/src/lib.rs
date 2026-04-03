@@ -1,9 +1,8 @@
 pub mod model;
-pub mod runtime;
 pub mod store;
 
 pub use model::{
-    ChannelDescriptor, ChannelSample, ChannelValue, PluginHealth, PluginSnapshot, TelemetryUpdate,
+    ChannelDescriptor, ChannelSample, ChannelValue, PluginHealth, PluginRuntimeState,
+    PluginSnapshot, PluginStatusUpdate, RuntimeEvent, TelemetryUpdate,
 };
-pub use runtime::{PluginHandle, SourcePlugin};
 pub use store::{ChannelSnapshot, StoreSnapshot, TelemetryStore};

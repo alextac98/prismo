@@ -1,10 +1,13 @@
-use std::time::{Duration, Instant};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use prismo_core::{ChannelDescriptor, ChannelSample, ChannelValue, PluginHealth, TelemetryUpdate};
-use prismo_core::{PluginHandle, SourcePlugin};
+use anyhow::Result;
+use prismo_plugin_protocol::{ChannelDescriptor, Health, Sample};
+use prismo_plugin_sdk_rust::{
+    stdio, value_bool, value_bytes, value_float, value_integer, value_text,
+};
 use rand::Rng;
-use tokio::sync::mpsc;
-use tokio::time;
+use serde::Deserialize;
 
 #[derive(Clone, Copy)]
 enum SyntheticValueKind {
@@ -42,7 +45,7 @@ struct SyntheticChannelSpec {
 impl SyntheticChannelSpec {
     fn descriptor(self) -> ChannelDescriptor {
         ChannelDescriptor {
-            path: self.path.to_string(),
+            channel_path: self.path.to_string(),
             display_name: self
                 .path
                 .rsplit('.')
@@ -68,38 +71,38 @@ impl SyntheticChannelSpec {
             .unwrap_or(false)
     }
 
-    fn sample(self, tick: u64, sequence: u64, timestamp: Instant) -> ChannelSample {
+    fn sample(self, tick: u64, sequence: u64, timestamp_unix_ns: u64) -> Sample {
         let mut rng = rand::rng();
         let phase = tick as f64 / self.every_ticks as f64;
         let value = match self.kind {
             SyntheticValueKind::Float { base, jitter } => {
                 let wave = (phase * 0.37).sin() * jitter;
                 let noise = rng.random_range((-jitter * 0.18)..(jitter * 0.18));
-                ChannelValue::Float(base + wave + noise)
+                value_float(base + wave + noise)
             }
             SyntheticValueKind::Integer { base, jitter } => {
                 let wave = ((phase * 0.41).sin() * jitter as f64).round() as i64;
                 let noise = rng.random_range(-jitter..=jitter);
-                ChannelValue::Integer(base + wave + noise)
+                value_integer(base + wave + noise)
             }
             SyntheticValueKind::Bool {
                 nominal_probability,
-            } => ChannelValue::Bool(rng.random_bool(nominal_probability)),
+            } => value_bool(rng.random_bool(nominal_probability)),
             SyntheticValueKind::Text(options) => {
                 let index = rng.random_range(0..options.len());
-                ChannelValue::Text(options[index].to_string())
+                value_text(options[index].to_string())
             }
-            SyntheticValueKind::Bytes { len } => ChannelValue::Bytes(
+            SyntheticValueKind::Bytes { len } => value_bytes(
                 (0..len)
                     .map(|_| rng.random_range(0_u8..=255))
                     .collect::<Vec<_>>(),
             ),
         };
 
-        ChannelSample {
-            path: self.path.to_string(),
-            value,
-            timestamp,
+        Sample {
+            channel_path: self.path.to_string(),
+            value: Some(value),
+            timestamp_unix_ns,
             sequence,
         }
     }
@@ -999,79 +1002,85 @@ impl Default for ExampleRustPlugin {
     }
 }
 
-impl SourcePlugin for ExampleRustPlugin {
+impl ExampleRustPlugin {
     fn id(&self) -> &'static str {
         "example-rust"
     }
+}
 
-    fn spawn(self: Box<Self>, tx: mpsc::Sender<TelemetryUpdate>) -> PluginHandle {
-        tokio::spawn(async move {
-            let specs = self.specs();
-            let descriptors = specs
-                .iter()
-                .copied()
-                .map(SyntheticChannelSpec::descriptor)
-                .collect::<Vec<_>>();
-            let mut ticker = time::interval(self.period);
-            ticker.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+#[derive(Debug, Deserialize)]
+struct ExamplePluginConfig {
+    #[serde(default = "default_tick_ms")]
+    tick_ms: u64,
+}
 
-            let mut tick = 0_u64;
-            let mut emitted_updates = 0_u64;
-            let mut dropped_updates = 0_u64;
+impl Default for ExamplePluginConfig {
+    fn default() -> Self {
+        Self {
+            tick_ms: default_tick_ms(),
+        }
+    }
+}
 
-            loop {
-                ticker.tick().await;
-                tick += 1;
-                emitted_updates += 1;
+pub fn run_stdio_plugin() -> Result<()> {
+    let mut io = stdio()?;
+    let config = io.config::<ExamplePluginConfig>().unwrap_or_default();
+    let plugin = ExampleRustPlugin::new(Duration::from_millis(config.tick_ms));
+    let specs = plugin.specs();
+    let descriptors = specs
+        .iter()
+        .copied()
+        .map(SyntheticChannelSpec::descriptor)
+        .collect::<Vec<_>>();
 
-                let timestamp = Instant::now();
-                let samples = specs
-                    .iter()
-                    .copied()
-                    .filter(|spec| spec.should_emit(tick))
-                    .map(|spec| spec.sample(tick, emitted_updates, timestamp))
-                    .collect::<Vec<_>>();
+    io.send_hello(plugin.id(), env!("CARGO_PKG_VERSION"), "rust")?;
+    io.declare_channels(plugin.id(), descriptors)?;
 
-                dropped_updates += specs
-                    .iter()
-                    .copied()
-                    .filter(|spec| spec.is_dropped_out(tick) && tick % spec.every_ticks == 0)
-                    .count() as u64;
+    let mut tick = 0_u64;
+    let mut emitted_updates = 0_u64;
+    let mut dropped_updates = 0_u64;
 
-                let current_outages = specs
-                    .iter()
-                    .copied()
-                    .filter(|spec| spec.is_dropped_out(tick))
-                    .map(|spec| spec.path)
-                    .take(3)
-                    .collect::<Vec<_>>();
+    loop {
+        thread::sleep(plugin.period);
+        tick += 1;
+        emitted_updates += 1;
 
-                let update = TelemetryUpdate {
-                    plugin_id: self.id().to_string(),
-                    descriptors: if tick == 1 {
-                        descriptors.clone()
-                    } else {
-                        Vec::new()
-                    },
-                    samples,
-                    health: Some(PluginHealth {
-                        emitted_updates,
-                        dropped_updates,
-                        last_error: if current_outages.is_empty() {
-                            None
-                        } else {
-                            Some(format!("dropouts: {}", current_outages.join(", ")))
-                        },
-                    }),
-                };
+        let timestamp_unix_ns = unix_timestamp_ns();
+        let samples = specs
+            .iter()
+            .copied()
+            .filter(|spec| spec.should_emit(tick))
+            .map(|spec| spec.sample(tick, emitted_updates, timestamp_unix_ns))
+            .collect::<Vec<_>>();
 
-                if tx.send(update).await.is_err() {
-                    break;
-                }
-            }
+        dropped_updates += specs
+            .iter()
+            .copied()
+            .filter(|spec| spec.is_dropped_out(tick) && tick % spec.every_ticks == 0)
+            .count() as u64;
 
-            Ok(())
-        })
+        let current_outages = specs
+            .iter()
+            .copied()
+            .filter(|spec| spec.is_dropped_out(tick))
+            .map(|spec| spec.path)
+            .take(3)
+            .collect::<Vec<_>>();
+
+        io.send_samples(plugin.id(), samples)?;
+        io.send_health(
+            plugin.id(),
+            Health {
+                plugin_id: plugin.id().to_string(),
+                emitted_updates,
+                dropped_updates,
+                last_error: if current_outages.is_empty() {
+                    None
+                } else {
+                    Some(format!("dropouts: {}", current_outages.join(", ")))
+                },
+            },
+        )?;
     }
 }
 
@@ -1091,4 +1100,15 @@ fn spec(
         every_ticks,
         dropout,
     }
+}
+
+fn default_tick_ms() -> u64 {
+    200
+}
+
+fn unix_timestamp_ns() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64
 }

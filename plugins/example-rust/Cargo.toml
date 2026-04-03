@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 rand.workspace = true
-tokio.workspace = true
-prismo-core = { path = "../../crates/core" }
+serde.workspace = true
+prismo-plugin-protocol = { path = "../../crates/plugin-protocol" }
+prismo-plugin-sdk-rust = { path = "../../crates/plugin-sdk-rust" }

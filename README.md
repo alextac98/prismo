@@ -5,9 +5,9 @@
 `prismo` is a terminal telemetry viewer prototype written in Rust for embedded and target-side debugging.
 
 The current prototype is intentionally small:
-- a Bazel-first Rust workspace with a TUI app, core telemetry model, and a Rust example plugin
+- a Rust workspace with a TUI app, an internal telemetry core, a protobuf-based plugin protocol, and a Rust example plugin
 - a two-pane telemetry UI built with `ratatui` and `crossterm`
-- a stub `SourcePlugin` implementation that generates randomized telemetry so the UI can be developed without a live target
+- a subprocess example plugin that generates randomized telemetry so the UI can be developed without a live target
 - a workspace split that keeps app wiring, UI, and telemetry contracts separate
 
 ## Current State
@@ -27,12 +27,15 @@ The app already supports:
 - a help overlay
 - a minimum supported window size with a fallback message
 
-The current source is the Rust example plugin only. Real source loading, decoder plugins, config files, and external plugin processes are not implemented yet.
+The current source is the Rust example plugin only, but it already runs through the same subprocess protocol path intended for future Python and C++ plugins.
 
 ## Workspace Layout
 
 - `apps/prismo`: the `prismo` binary and runtime loop
-- `crates/core`: telemetry data model, store, and Rust `SourcePlugin` contract
+- `crates/core`: internal telemetry data model, store, and runtime snapshots
+- `crates/plugin-protocol`: protobuf messages, framing, manifests, and project-local config
+- `crates/plugin-host`: subprocess supervision and wire-message normalization
+- `crates/plugin-sdk-rust`: Rust plugin authoring helper
 - `crates/tui`: layout, rendering, input handling, and help UI
 - `plugins/example-rust`: Rust example plugin implementation
 - `docs/`: project documentation
@@ -40,34 +43,25 @@ The current source is the Rust example plugin only. Real source loading, decoder
 ## Build and Run
 
 Requirements:
-- Bazel 8.x
 - a terminal with alternate-screen support
 - OSC 52 clipboard support if you want yank/copy to reach your terminal clipboard
 
 Run:
 
 ```bash
-bazel run //:prismo
+cargo run -q
 ```
 
 Build and test:
 
 ```bash
-bazel build //...
-bazel test //...
+cargo test
 ```
 
-Format and check formatting:
+Format:
 
 ```bash
-bazel run //:format
-bazel run //:format.check
-```
-
-Rust compile checks:
-
-```bash
-bazel build //...
+cargo fmt
 ```
 
 Cargo manifests are still present because `rules_rust` `crate_universe` reads the workspace dependency graph from [Cargo.toml](/Users/alex/code/alextac98/prismo/Cargo.toml) and [Cargo.lock](/Users/alex/code/alextac98/prismo/Cargo.lock).
@@ -96,25 +90,25 @@ The main shortcuts today are:
 
 The status bar is split into two parts:
 - left: quit/help hints, focus, and transient notices such as copy success or failure
-- right: app-wide counters and plugin health
+- right: app-wide counters plus plugin state and health
 
 Example:
 
 ```text
-:q quit  : command  ? help  focus:channels                      total:42 dropped:0  example-rust updates:42 dropped:0
+:q quit  : command  ? help  focus:channels                      total:42 dropped:0  example-rust:running r0 u:42 d:0
 ```
 
-`total` is the number of update batches applied by the store. `example-rust updates` is the update count reported by the example plugin itself.
+`total` is the number of update batches applied by the store. `r0` is the restart count for the plugin instance.
 
 ## Plugin Model Today
 
-The current plugin boundary is minimal:
-- `core` defines `SourcePlugin`
-- `SourcePlugin` produces `TelemetryUpdate` messages
-- the app pushes those updates into `TelemetryStore`
+The current plugin boundary is protocol-first:
+- plugins are child processes spawned by `prismo`
+- `stdin` / `stdout` carry length-prefixed protobuf frames
+- the host normalizes those frames into internal telemetry updates
 - the TUI renders store snapshots
 
-The example source in `plugins/example-rust` is the only implementation right now. It emits channel descriptors on startup and then periodically emits samples and plugin health.
+The example source in `plugins/example-rust` is the only implementation right now. It emits channel descriptors on startup and then periodically emits samples and plugin health over the shared protocol.
 
 ## Notes About Freshness
 
@@ -124,11 +118,9 @@ The example source in `plugins/example-rust` is the only implementation right no
 
 ## Next Likely Steps
 
-- move source selection behind config or CLI arguments
-- add a transport-level contract for external process plugins
 - split transport and decode stages more explicitly
+- add Python and C++ SDKs on top of the shared protocol
 - add tests for rendering, store behavior, and plugin contracts
-- define an external plugin protocol for non-Rust implementations
 
 ## Docs
 

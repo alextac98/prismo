@@ -1,14 +1,20 @@
 load("@crates//:defs.bzl", "all_crate_deps")
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 rust_library(
-    name = "example_rust",
+    name = "plugin_host",
     srcs = glob(["src/**/*.rs"]),
-    crate_name = "prismo_example_rust",
+    crate_name = "prismo_plugin_host",
     edition = "2024",
     deps = all_crate_deps(normal = True) + [
+        "//crates/core:core",
         "//crates/plugin-protocol:plugin_protocol",
-        "//crates/plugin-sdk-rust:plugin_sdk_rust",
     ],
     visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "plugin_host_test",
+    crate = ":plugin_host",
+    edition = "2024",
 )

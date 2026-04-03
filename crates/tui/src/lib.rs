@@ -725,14 +725,29 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
 
     let plugin_summary = snapshot
         .plugins
-        .first()
+        .iter()
         .map(|plugin| {
-            format!(
-                "{} updates:{} dropped:{}",
-                plugin.plugin_id, plugin.health.emitted_updates, plugin.health.dropped_updates
-            )
+            let health = format!(
+                "u:{} d:{}",
+                plugin.health.emitted_updates, plugin.health.dropped_updates
+            );
+            match &plugin.message {
+                Some(message) => format!(
+                    "{}:{} r{} {} {}",
+                    plugin.plugin_id, plugin.state, plugin.restart_count, health, message
+                ),
+                None => format!(
+                    "{}:{} r{} {}",
+                    plugin.plugin_id, plugin.state, plugin.restart_count, health
+                ),
+            }
         })
-        .unwrap_or_else(|| "plugin: connecting".to_string());
+        .collect::<Vec<_>>();
+    let plugin_summary = if plugin_summary.is_empty() {
+        "plugins: starting".to_string()
+    } else {
+        plugin_summary.join(" | ")
+    };
 
     let status_left = if let Some(notice) = ui.status_notice() {
         format!(
@@ -1176,7 +1191,8 @@ fn build_tree_rows<'a>(
     let mut root = NamespaceNode::default();
 
     for channel in channels {
-        let parts = channel.descriptor.path.split('.').collect::<Vec<_>>();
+        let tree_path = channel_tree_path(channel);
+        let parts = tree_path.split('.').collect::<Vec<_>>();
 
         if parts.len() <= 1 {
             root.channels.push(channel);
@@ -1207,7 +1223,8 @@ fn visible_namespace_paths(channels: Vec<&ChannelSnapshot>) -> HashSet<String> {
     let mut paths = HashSet::new();
     for channel in channels {
         let mut current = String::new();
-        let parts = channel.descriptor.path.split('.').collect::<Vec<_>>();
+        let tree_path = channel_tree_path(channel);
+        let parts = tree_path.split('.').collect::<Vec<_>>();
         for part in &parts[..parts.len().saturating_sub(1)] {
             if !current.is_empty() {
                 current.push('.');
@@ -1227,7 +1244,7 @@ fn append_tree_rows<'a>(
 ) {
     for namespace in node.namespaces.values() {
         let mut descendant_channels = collect_descendant_channels(namespace);
-        descendant_channels.sort_by(|left, right| left.descriptor.path.cmp(&right.descriptor.path));
+        descendant_channels.sort_by_key(|channel| channel_tree_path(channel));
         let collapsed = collapsed_namespaces.contains(&namespace.path);
         rows.push(TreeRow {
             depth,
@@ -1323,7 +1340,7 @@ fn build_channel_detail_lines(
         .map(|sample| sample.value.to_string())
         .unwrap_or_else(|| "waiting for data".to_string());
     let last_received = latest
-        .map(|sample| format_duration(sample.timestamp.elapsed()))
+        .map(|sample| format_duration(sample.observed_at.elapsed()))
         .unwrap_or_else(|| "n/a".to_string());
     let rate = channel
         .rate_hz
@@ -1367,13 +1384,14 @@ fn build_channel_detail_lines(
                 Span::styled(latest_value, value_style()),
             ]),
         },
+        detail_row("Type", "channel", "Plugin", &channel.plugin_id),
         detail_row(
-            "Type",
-            "channel",
             "Unit",
             channel.descriptor.unit.as_deref().unwrap_or("-"),
+            "Last Received",
+            &last_received,
         ),
-        detail_row("Rate", &rate, "Last Received", &last_received),
+        detail_row("Rate", &rate, "Source", &channel.plugin_id),
         labeled_value_line("Notes", &channel.descriptor.description, value_style()),
     ]
 }
@@ -1409,7 +1427,7 @@ fn build_namespace_detail_lines(
 fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent {
     let latest = channel.latest.as_ref();
     let last_received = latest
-        .map(|sample| format_duration(sample.timestamp.elapsed()))
+        .map(|sample| format_duration(sample.observed_at.elapsed()))
         .unwrap_or_else(|| "n/a".to_string());
     let rate = channel
         .rate_hz
@@ -1497,11 +1515,11 @@ fn build_namespace_variable_lines(
     }
 
     let mut sorted = channels.to_vec();
-    sorted.sort_by(|left, right| left.descriptor.path.cmp(&right.descriptor.path));
+    sorted.sort_by_key(|channel| channel_tree_path(channel));
     sorted
         .into_iter()
         .map(|channel| {
-            let relative = relative_channel_path(path, &channel.descriptor.path);
+            let relative = relative_channel_path(path, &channel_tree_path(channel));
             let marker = if channel.is_stale { "stale" } else { "live" };
             let value = channel
                 .latest
@@ -1547,7 +1565,7 @@ fn relative_channel_path(namespace_path: &str, full_path: &str) -> String {
 fn row_key(row: &TreeRow<'_>) -> RowKey {
     match &row.kind {
         TreeRowKind::Namespace { path, .. } => RowKey::Namespace(path.clone()),
-        TreeRowKind::Channel { channel } => RowKey::Channel(channel.descriptor.path.clone()),
+        TreeRowKind::Channel { channel } => RowKey::Channel(channel_tree_path(channel)),
     }
 }
 
@@ -1555,10 +1573,14 @@ fn row_matches_key(row: &TreeRow<'_>, key: &RowKey) -> bool {
     match (&row.kind, key) {
         (TreeRowKind::Namespace { path, .. }, RowKey::Namespace(target)) => path == target,
         (TreeRowKind::Channel { channel }, RowKey::Channel(target)) => {
-            channel.descriptor.path == *target
+            channel_tree_path(channel) == *target
         }
         _ => false,
     }
+}
+
+fn channel_tree_path(channel: &ChannelSnapshot) -> String {
+    format!("{}.{}", channel.plugin_id, channel.descriptor.path)
 }
 
 fn ancestor_namespace_keys(key: &RowKey) -> Vec<RowKey> {

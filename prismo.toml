@@ -1,0 +1,8 @@
+[[plugins]]
+plugin_id = "example-rust"
+manifest = "./plugins/example-rust/prismo-plugin.toml"
+enabled = true
+restart = "on-failure"
+
+[plugins.config]
+tick_ms = 200

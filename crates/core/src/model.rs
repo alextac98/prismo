@@ -66,7 +66,8 @@ impl fmt::Display for ChannelValue {
 pub struct ChannelSample {
     pub path: String,
     pub value: ChannelValue,
-    pub timestamp: Instant,
+    pub observed_at: Instant,
+    pub source_timestamp_unix_ns: u64,
     pub sequence: u64,
 }
 
@@ -80,6 +81,9 @@ pub struct PluginHealth {
 #[derive(Clone, Debug)]
 pub struct PluginSnapshot {
     pub plugin_id: String,
+    pub state: PluginRuntimeState,
+    pub restart_count: u64,
+    pub message: Option<String>,
     pub health: PluginHealth,
 }
 
@@ -89,4 +93,40 @@ pub struct TelemetryUpdate {
     pub descriptors: Vec<ChannelDescriptor>,
     pub samples: Vec<ChannelSample>,
     pub health: Option<PluginHealth>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
+pub enum PluginRuntimeState {
+    #[default]
+    Starting,
+    Running,
+    Restarting,
+    Stopped,
+    Crashed,
+}
+
+impl fmt::Display for PluginRuntimeState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Starting => f.write_str("starting"),
+            Self::Running => f.write_str("running"),
+            Self::Restarting => f.write_str("restarting"),
+            Self::Stopped => f.write_str("stopped"),
+            Self::Crashed => f.write_str("crashed"),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PluginStatusUpdate {
+    pub plugin_id: String,
+    pub state: PluginRuntimeState,
+    pub restart_count: u64,
+    pub message: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub enum RuntimeEvent {
+    Telemetry(TelemetryUpdate),
+    PluginStatus(PluginStatusUpdate),
 }

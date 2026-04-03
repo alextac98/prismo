@@ -9,8 +9,8 @@ anyhow.workspace = true
 base64.workspace = true
 crossterm.workspace = true
 ratatui.workspace = true
-tokio.workspace = true
 tracing-subscriber.workspace = true
 prismo-core = { path = "../../crates/core" }
+prismo-plugin-host = { path = "../../crates/plugin-host" }
 prismo-example-rust = { path = "../../plugins/example-rust" }
 prismo-tui = { path = "../../crates/tui" }

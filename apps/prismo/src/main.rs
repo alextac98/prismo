@@ -1,5 +1,7 @@
 use std::io;
 use std::io::Write;
+use std::path::Path;
+use std::sync::mpsc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -9,29 +11,30 @@ use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use prismo_core::{SourcePlugin, TelemetryStore};
-use prismo_example_rust::ExampleRustPlugin;
+use prismo_core::{RuntimeEvent, TelemetryStore};
+use prismo_plugin_host::PluginHost;
 use prismo_tui::{FocusPane, UiAction, UiState, selected_text};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<()> {
+    let args = std::env::args().collect::<Vec<_>>();
+    if matches!(
+        args.as_slice(),
+        [_, plugin, example] if plugin == "plugin" && example == "example-rust"
+    ) {
+        return prismo_example_rust::run_stdio_plugin();
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .without_time()
         .init();
 
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()?;
-
-    let (tx, mut rx) = mpsc::channel(64);
-    let plugin = Box::new(ExampleRustPlugin::default());
-    let runtime_guard = runtime.enter();
-    let _plugin_handle = plugin.spawn(tx);
-    drop(runtime_guard);
+    let config_path = Path::new("prismo.toml");
+    let (tx, rx) = mpsc::channel();
+    let host = PluginHost::start(config_path, tx, std::env::current_exe()?)?;
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -41,7 +44,8 @@ fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
 
-    let result = run_app(&mut terminal, &mut rx);
+    let result = run_app(&mut terminal, &rx);
+    host.shutdown();
 
     disable_raw_mode()?;
     execute!(
@@ -56,15 +60,15 @@ fn main() -> Result<()> {
 
 fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    rx: &mut mpsc::Receiver<prismo_core::TelemetryUpdate>,
+    rx: &mpsc::Receiver<RuntimeEvent>,
 ) -> Result<()> {
     let tick_rate = Duration::from_millis(100);
     let mut store = TelemetryStore::new();
     let mut ui = UiState::new();
 
     loop {
-        while let Ok(update) = rx.try_recv() {
-            store.apply_update(update);
+        while let Ok(event) = rx.try_recv() {
+            store.apply_event(event);
         }
 
         let snapshot = store.snapshot();

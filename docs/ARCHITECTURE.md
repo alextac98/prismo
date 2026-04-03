@@ -4,11 +4,12 @@
 
 `prismo` is structured as a small Rust workspace with a clear split between:
 - telemetry ingestion and modeling
+- plugin protocol and process hosting
 - TUI rendering and interaction
 - application runtime wiring
-- built-in plugin implementations
+- plugin SDKs and implementations
 
-The current architecture is intentionally simple but already shaped around a plugin boundary.
+The current architecture is intentionally simple but now uses a protocol-first plugin boundary.
 
 ## Crates
 
@@ -19,16 +20,38 @@ This crate owns the core telemetry concepts:
 - `ChannelValue`
 - `ChannelSample`
 - `TelemetryUpdate`
+- `RuntimeEvent`
 - `PluginHealth`
+- `PluginRuntimeState`
 - `TelemetryStore`
-- `SourcePlugin`
-- `PluginHandle`
 
-It owns both the telemetry contract and the current in-process Rust source-plugin boundary.
+It owns the internal telemetry contract used after plugin messages are normalized by the host.
+
+## `crates/plugin-protocol`
+
+This crate owns the external plugin contract:
+- protobuf message types
+- length-prefixed frame helpers
+- plugin manifest parsing
+- project-local runtime config parsing
+
+## `crates/plugin-host`
+
+This crate owns:
+- subprocess spawn and supervision
+- `stdin` / `stdout` / `stderr` transport
+- handshake validation
+- restart policy handling
+- conversion from wire messages into `RuntimeEvent`
+
+## `crates/plugin-sdk-rust`
+
+This crate is the first plugin authoring SDK for the subprocess protocol.
 
 ## `plugins/example-rust`
 
-This crate contains the current Rust example source implementation.
+This crate contains the current Rust example plugin implementation.
+It now runs as a subprocess plugin over the shared wire protocol.
 
 ## `crates/tui`
 
@@ -47,10 +70,10 @@ It renders from `StoreSnapshot` only. It does not talk directly to plugins.
 ## `apps/prismo`
 
 This crate is the executable:
-- selects and spawns a source implementation
-- creates the Tokio runtime
-- receives `TelemetryUpdate` batches through a channel
-- applies them to `TelemetryStore`
+- loads project-local config from `prismo.toml`
+- starts plugin subprocesses through `plugin-host`
+- receives `RuntimeEvent` values through a channel
+- applies normalized telemetry to `TelemetryStore`
 - drives the TUI render loop
 - handles clipboard yank via OSC 52
 
@@ -59,15 +82,17 @@ This crate is the executable:
 The current runtime looks like this:
 
 ```text
-ExampleRustPlugin -> SourcePlugin -> mpsc::Sender<TelemetryUpdate> -> app -> TelemetryStore -> StoreSnapshot -> tui
+plugin subprocess -> stdio + protobuf -> plugin-host -> RuntimeEvent -> app -> TelemetryStore -> StoreSnapshot -> tui
 ```
 
 Detailed flow:
-1. The app creates a bounded Tokio MPSC channel.
-2. The app constructs the example Rust source and spawns it through the `core` `SourcePlugin` trait.
-3. The main loop drains pending updates with `try_recv`.
-4. The store applies descriptors, samples, and plugin health.
-5. The TUI renders from the latest snapshot.
+1. The app reads `prismo.toml`.
+2. The host resolves each configured plugin manifest and spawns the plugin subprocess.
+3. The host sends `Init` on `stdin` and validates the child's `Hello`.
+4. The host normalizes plugin messages into `RuntimeEvent` values.
+5. The main loop drains pending events with `try_recv`.
+6. The store applies descriptors, samples, plugin health, and runtime state.
+7. The TUI renders from the latest snapshot.
 
 ## Telemetry Model
 
@@ -89,7 +114,7 @@ The store keeps:
 ## Store Behavior
 
 Important current store rules:
-- channels are keyed by path in a `BTreeMap`
+- channels are keyed by `(plugin_id, path)` in a `BTreeMap`
 - numeric history retention is capped at 64 samples
 - staleness is adaptive: a channel is stale when time since last sample exceeds `3x` the most recent observed interval
 - channels with only one sample fall back to a `3s` initial stale threshold
@@ -98,17 +123,17 @@ Important current store rules:
 
 ## Plugin Model
 
-Today the plugin model is source-only:
-- a `SourcePlugin` identifies itself with `id()`
-- it is responsible for spawning its own async task
-- it emits `TelemetryUpdate` batches
+Today the plugin model is subprocess-first:
+- each plugin runs as a child process
+- the host sends `Init` on `stdin`
+- the plugin writes framed protobuf messages on `stdout`
+- free-form logs go to `stderr`
 
 The example Rust plugin sends:
-- descriptors on the first update
-- randomized sample values on each interval tick
-- plugin health containing `emitted_updates`
-
-This is a minimal Rust runtime seam, not yet a full multi-language plugin architecture.
+- `Hello` on startup
+- `DeclareChannels` once
+- randomized `SampleBatch` messages on each interval tick
+- `Health` containing `emitted_updates`
 
 ## Build System
 
@@ -176,8 +201,7 @@ The help overlay is the canonical shortcut reference for the app.
 
 The current implementation does not yet have:
 - transport plugins separate from decoders
-- config files or CLI source selection
+- multiple instances of the same plugin type
 - persistence or replay
-- external process plugins
 - robust clipboard fallback behavior for terminals without OSC 52 support
 - responsive/truncated formatting for very large structured payloads beyond the current text renderers

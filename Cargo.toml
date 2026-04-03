@@ -1,6 +1,9 @@
 [workspace]
 members = [
     "crates/core",
+    "crates/plugin-host",
+    "crates/plugin-protocol",
+    "crates/plugin-sdk-rust",
     "crates/tui",
     "apps/prismo",
     "plugins/example-rust",
@@ -16,7 +19,11 @@ version = "0.1.0"
 anyhow = "1.0"
 base64 = "0.22"
 crossterm = "0.29"
+prost = "0.14"
 rand = "0.9"
 ratatui = "0.29"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "sync", "time"] }
+toml = "0.9"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

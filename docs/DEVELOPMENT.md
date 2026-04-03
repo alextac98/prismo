@@ -5,39 +5,19 @@
 Run the prototype:
 
 ```bash
-bazel run //:prismo
+cargo run -q
 ```
 
 Build and test:
 
 ```bash
-bazel build //...
-bazel test //...
+cargo test
 ```
 
 Format the workspace:
 
 ```bash
-bazel run //:format
-```
-
-Check formatting without rewriting files:
-
-```bash
-bazel run //:format.check
-```
-
-Run the Rust compile-check workflow:
-
-```bash
-bazel build //...
-```
-
-Dependency updates still flow through the Cargo workspace metadata that Bazel consumes through `crate_universe`:
-
-```bash
-cargo generate-lockfile
-CARGO_BAZEL_REPIN=1 bazel sync --only=crates
+cargo fmt
 ```
 
 ## Current Interaction Model
@@ -64,19 +44,21 @@ That means:
 
 ## Where To Extend The Prototype
 
-## Add a New Source Plugin
+## Add a New Plugin
 
 Start by deciding which boundary you need:
-- `crates/core` for shared telemetry types, store behavior, and the Rust `SourcePlugin` trait
-- `plugins/example-rust` for an example in-process Rust source implementation
+- `crates/plugin-protocol` for the wire contract
+- `crates/plugin-host` for process supervision and normalization
+- `crates/plugin-sdk-rust` for a Rust authoring helper
+- `plugins/example-rust` for a reference subprocess plugin
 
-For a new Rust source:
-- implement `SourcePlugin`
-- emit `TelemetryUpdate` batches
+For a new Rust plugin:
+- ship a plugin manifest with a command entrypoint
+- read `Init` from `stdin`
+- emit `Hello`, `DeclareChannels`, `SampleBatch`, and optional `Health`
 - send descriptors before samples that reference them
-- include `PluginHealth` if you want footer statistics
 
-Right now the app directly instantiates `ExampleRustPlugin` in `apps/prismo/src/main.rs`. Replacing that with source selection is the next logical step.
+Project-local plugin startup now flows through `prismo.toml`.
 
 ## Add New Renderers
 
@@ -110,18 +92,15 @@ Likely future expansions:
 
 - add documentation or tests around the current tree/filter/command interaction model
 - snapshot-test the TUI rendering surface
-- move the hard-coded plugin construction behind a config or CLI layer
 - separate transport ingestion from decode logic
 - introduce a decoder plugin trait
-- define an external plugin protocol for Python and C++ integrations
+- add Python and C++ SDKs on top of the shared protobuf protocol
 
 ## Notes For Future Multi-Language Plugins
 
-The current code is Rust-first and in-process. That is fine for this prototype.
+The runtime is already subprocess-based and protocol-first.
 
-If the project later needs Python or C++ plugins, a process boundary is likely the cleanest next step:
-- keep `TelemetryUpdate` as the conceptual contract
-- define a transport format for descriptors, samples, and health
-- run third-party decoders as sidecars instead of Rust dynamic libraries or in-process foreign runtimes
-
-That path preserves the current workspace shape without locking the project into a Rust-only extension model.
+That means Python and C++ support can be added by:
+- keeping the same protobuf message contract
+- providing language-specific SDKs
+- reusing the same project-local manifest and `prismo.toml` configuration model
