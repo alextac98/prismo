@@ -1,0 +1,9 @@
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+])
+
+alias(
+    name = "prismo",
+    actual = "//crates/telemetry-app:prismo",
+)

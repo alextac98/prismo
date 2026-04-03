@@ -4,6 +4,7 @@
 
 `prismo` is structured as a small Rust workspace with a clear split between:
 - telemetry ingestion and modeling
+- runtime source/plugin contracts
 - TUI rendering and interaction
 - application runtime wiring
 
@@ -20,9 +21,20 @@ This crate owns the core telemetry concepts:
 - `TelemetryUpdate`
 - `PluginHealth`
 - `TelemetryStore`
-- `SourcePlugin`
 
-It also contains the current synthetic plugin implementation.
+It does not own plugin/runtime concerns anymore.
+
+## `crates/telemetry-runtime`
+
+This crate owns the Rust runtime source boundary:
+- `SourcePlugin`
+- `PluginHandle`
+
+It is intentionally small so it can be replaced or bypassed later by a process-based plugin host.
+
+## `crates/telemetry-synthetic`
+
+This crate contains the current synthetic source implementation.
 
 ## `crates/telemetry-tui`
 
@@ -41,8 +53,8 @@ It renders from `StoreSnapshot` only. It does not talk directly to plugins.
 ## `crates/telemetry-app`
 
 This crate is the executable:
+- selects and spawns a source implementation
 - creates the Tokio runtime
-- spawns the source plugin
 - receives `TelemetryUpdate` batches through a channel
 - applies them to `TelemetryStore`
 - drives the TUI render loop
@@ -53,12 +65,12 @@ This crate is the executable:
 The current runtime looks like this:
 
 ```text
-SyntheticPlugin -> mpsc::Sender<TelemetryUpdate> -> telemetry-app -> TelemetryStore -> StoreSnapshot -> telemetry-tui
+SyntheticPlugin -> SourcePlugin -> mpsc::Sender<TelemetryUpdate> -> telemetry-app -> TelemetryStore -> StoreSnapshot -> telemetry-tui
 ```
 
 Detailed flow:
 1. The app creates a bounded Tokio MPSC channel.
-2. The synthetic plugin is spawned and periodically sends `TelemetryUpdate`.
+2. The app constructs the synthetic source and spawns it through the `telemetry-runtime` trait.
 3. The main loop drains pending updates with `try_recv`.
 4. The store applies descriptors, samples, and plugin health.
 5. The TUI renders from the latest snapshot.
@@ -102,7 +114,17 @@ The synthetic plugin sends:
 - randomized sample values on each interval tick
 - plugin health containing `emitted_updates`
 
-This is a minimal in-process plugin seam, not yet a full multi-language plugin architecture.
+This is a minimal Rust runtime seam, not yet a full multi-language plugin architecture.
+
+## Build System
+
+Bazel is the primary build system:
+- `MODULE.bazel` pins the Bazel module graph
+- `rules_rust` provides the hermetic Rust toolchain
+- `crate_universe` reads the Cargo workspace metadata and resolves external Rust crates for Bazel
+- each crate has its own `BUILD.bazel`
+
+Cargo manifests remain in the repo as dependency metadata and editor/tooling support, not as the primary execution path.
 
 ## UI Structure
 
@@ -162,7 +184,6 @@ The current implementation does not yet have:
 - transport plugins separate from decoders
 - config files or CLI source selection
 - persistence or replay
-- tests
 - external process plugins
 - robust clipboard fallback behavior for terminals without OSC 52 support
 - responsive/truncated formatting for very large structured payloads beyond the current text renderers

@@ -152,3 +152,106 @@ impl TelemetryStore {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use crate::{
+        ChannelDescriptor, ChannelSample, ChannelValue, PluginHealth, TelemetryStore,
+        TelemetryUpdate,
+    };
+
+    #[test]
+    fn drops_samples_that_arrive_before_descriptors() {
+        let mut store = TelemetryStore::new();
+
+        store.apply_update(TelemetryUpdate {
+            plugin_id: "synthetic".to_string(),
+            descriptors: Vec::new(),
+            samples: vec![sample("power.battery.voltage", 27.2, Instant::now(), 1)],
+            health: None,
+        });
+
+        let snapshot = store.snapshot();
+
+        assert_eq!(snapshot.total_updates, 1);
+        assert_eq!(snapshot.dropped_updates, 1);
+        assert!(snapshot.channels.is_empty());
+    }
+
+    #[test]
+    fn tracks_channel_history_and_plugin_health() {
+        let mut store = TelemetryStore::new();
+        let start = Instant::now();
+
+        store.apply_update(TelemetryUpdate {
+            plugin_id: "synthetic".to_string(),
+            descriptors: vec![descriptor("power.battery.voltage", Some("V"))],
+            samples: vec![sample("power.battery.voltage", 27.2, start, 1)],
+            health: Some(PluginHealth {
+                emitted_updates: 1,
+                dropped_updates: 0,
+                last_error: None,
+            }),
+        });
+        store.apply_update(TelemetryUpdate {
+            plugin_id: "synthetic".to_string(),
+            descriptors: Vec::new(),
+            samples: vec![sample(
+                "power.battery.voltage",
+                27.4,
+                start + Duration::from_millis(100),
+                2,
+            )],
+            health: Some(PluginHealth {
+                emitted_updates: 2,
+                dropped_updates: 0,
+                last_error: Some("none".to_string()),
+            }),
+        });
+
+        let snapshot = store.snapshot();
+        let channel = snapshot
+            .channels
+            .iter()
+            .find(|channel| channel.descriptor.path == "power.battery.voltage")
+            .expect("channel snapshot");
+        let plugin = snapshot
+            .plugins
+            .iter()
+            .find(|plugin| plugin.plugin_id == "synthetic")
+            .expect("plugin snapshot");
+
+        assert_eq!(snapshot.total_updates, 2);
+        assert_eq!(snapshot.dropped_updates, 0);
+        assert_eq!(channel.history, vec![27.2, 27.4]);
+        assert_eq!(channel.update_count, 2);
+        assert_eq!(
+            channel.latest.as_ref().map(|sample| sample.sequence),
+            Some(2)
+        );
+        assert_eq!(plugin.health.emitted_updates, 2);
+        assert_eq!(plugin.health.last_error.as_deref(), Some("none"));
+        assert!(!channel.is_stale);
+        assert!(channel.rate_hz.expect("sample rate") > 0.0);
+    }
+
+    fn descriptor(path: &str, unit: Option<&str>) -> ChannelDescriptor {
+        ChannelDescriptor {
+            path: path.to_string(),
+            display_name: path.rsplit('.').next().unwrap_or(path).to_string(),
+            unit: unit.map(str::to_string),
+            description: "test channel".to_string(),
+        }
+    }
+
+    fn sample(path: &str, value: f64, timestamp: Instant, sequence: u64) -> ChannelSample {
+        ChannelSample {
+            path: path.to_string(),
+            value: ChannelValue::Float(value),
+            timestamp,
+            sequence,
+        }
+    }
+}

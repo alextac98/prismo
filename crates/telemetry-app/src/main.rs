@@ -11,7 +11,9 @@ use crossterm::terminal::{
 };
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use telemetry_core::{SourcePlugin, SyntheticPlugin, TelemetryStore};
+use telemetry_core::TelemetryStore;
+use telemetry_runtime::SourcePlugin;
+use telemetry_synthetic::SyntheticPlugin;
 use telemetry_tui::{FocusPane, UiAction, UiState, selected_text};
 use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;

@@ -1,3 +1,7 @@
 /target
-Cargo.lock
+.bazel-cache
+bazel-bin
+bazel-out
+bazel-prismo
+bazel-testlogs
 .DS_Store

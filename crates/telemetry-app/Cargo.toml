@@ -10,7 +10,8 @@ base64.workspace = true
 crossterm.workspace = true
 ratatui.workspace = true
 tokio.workspace = true
-tracing.workspace = true
 tracing-subscriber.workspace = true
 telemetry-core = { path = "../telemetry-core" }
+telemetry-runtime = { path = "../telemetry-runtime" }
+telemetry-synthetic = { path = "../telemetry-synthetic" }
 telemetry-tui = { path = "../telemetry-tui" }

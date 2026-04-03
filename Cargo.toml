@@ -1,6 +1,8 @@
 [workspace]
 members = [
     "crates/telemetry-core",
+    "crates/telemetry-runtime",
+    "crates/telemetry-synthetic",
     "crates/telemetry-tui",
     "crates/telemetry-app",
 ]
@@ -17,7 +19,5 @@ base64 = "0.22"
 crossterm = "0.29"
 rand = "0.9"
 ratatui = "0.29"
-thiserror = "2.0"
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "sync", "time"] }
-tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

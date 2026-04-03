@@ -1,11 +1,12 @@
 use std::time::{Duration, Instant};
 
 use rand::Rng;
+use telemetry_core::{
+    ChannelDescriptor, ChannelSample, ChannelValue, PluginHealth, TelemetryUpdate,
+};
+use telemetry_runtime::{PluginHandle, SourcePlugin};
 use tokio::sync::mpsc;
 use tokio::time;
-
-use crate::model::{ChannelDescriptor, ChannelSample, ChannelValue, PluginHealth, TelemetryUpdate};
-use crate::{PluginHandle, SourcePlugin};
 
 #[derive(Clone, Copy)]
 enum SyntheticValueKind {
@@ -56,7 +57,7 @@ impl SyntheticChannelSpec {
     }
 
     fn should_emit(self, tick: u64) -> bool {
-        tick.is_multiple_of(self.every_ticks)
+        tick % self.every_ticks == 0
             && self
                 .dropout
                 .map(|pattern| pattern.is_active(tick))
@@ -1036,9 +1037,7 @@ impl SourcePlugin for SyntheticPlugin {
                 dropped_updates += specs
                     .iter()
                     .copied()
-                    .filter(|spec| {
-                        spec.is_dropped_out(tick) && tick.is_multiple_of(spec.every_ticks)
-                    })
+                    .filter(|spec| spec.is_dropped_out(tick) && tick % spec.every_ticks == 0)
                     .count() as u64;
 
                 let current_outages = specs

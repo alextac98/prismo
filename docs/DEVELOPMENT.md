@@ -5,14 +5,27 @@
 Run the prototype:
 
 ```bash
-cargo run -p prismo
+bazel run //:prismo
 ```
 
-Format and check:
+Build and test:
+
+```bash
+bazel build //...
+bazel test //...
+```
+
+Dependency updates still flow through the Cargo workspace metadata that Bazel consumes through `crate_universe`:
+
+```bash
+cargo generate-lockfile
+CARGO_BAZEL_REPIN=1 bazel sync --only=crates
+```
+
+Formatting is still simplest through:
 
 ```bash
 cargo fmt
-cargo check
 ```
 
 ## Current Interaction Model
@@ -41,7 +54,12 @@ That means:
 
 ## Add a New Source Plugin
 
-Start in `crates/telemetry-core`:
+Start by deciding which boundary you need:
+- `crates/telemetry-core` for shared telemetry types and store behavior
+- `crates/telemetry-runtime` for the Rust source trait
+- `crates/telemetry-synthetic` for an example in-process source implementation
+
+For a new Rust source:
 - implement `SourcePlugin`
 - emit `TelemetryUpdate` batches
 - send descriptors before samples that reference them
@@ -80,7 +98,6 @@ Likely future expansions:
 ## Suggested Next Engineering Steps
 
 - add documentation or tests around the current tree/filter/command interaction model
-- add unit tests for `TelemetryStore`
 - snapshot-test the TUI rendering surface
 - move the hard-coded plugin construction behind a config or CLI layer
 - separate transport ingestion from decode logic
@@ -94,6 +111,6 @@ The current code is Rust-first and in-process. That is fine for this prototype.
 If the project later needs Python or C++ plugins, a process boundary is likely the cleanest next step:
 - keep `TelemetryUpdate` as the conceptual contract
 - define a transport format for descriptors, samples, and health
-- run third-party decoders as sidecars instead of Rust dynamic libraries
+- run third-party decoders as sidecars instead of Rust dynamic libraries or in-process foreign runtimes
 
 That path preserves the current workspace shape without locking the project into a Rust-only extension model.

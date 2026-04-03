@@ -1,0 +1,11 @@
+[package]
+name = "telemetry-synthetic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rand.workspace = true
+tokio.workspace = true
+telemetry-core = { path = "../telemetry-core" }
+telemetry-runtime = { path = "../telemetry-runtime" }

@@ -1,0 +1,4 @@
+build --incompatible_strict_action_env
+build --jobs=auto
+
+test --test_output=errors

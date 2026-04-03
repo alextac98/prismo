@@ -5,10 +5,10 @@
 `prismo` is a terminal telemetry viewer prototype written in Rust for embedded and target-side debugging.
 
 The current prototype is intentionally small:
-- a Rust workspace with a TUI app, core telemetry model, and synthetic data plugin
+- a Bazel-first Rust workspace with a TUI app, core telemetry model, runtime source API, and synthetic data source
 - a two-pane telemetry UI built with `ratatui` and `crossterm`
-- a stub `SourcePlugin` that generates randomized telemetry so the UI can be developed without a live target
-- a plugin-oriented core shape that can be extended beyond the synthetic source
+- a stub `SourcePlugin` implementation that generates randomized telemetry so the UI can be developed without a live target
+- a crate split that keeps telemetry contracts separate from runtime/plugin concerns
 
 ## Current State
 
@@ -32,29 +32,33 @@ The current source is synthetic only. Real source loading, decoder plugins, conf
 ## Workspace Layout
 
 - `crates/telemetry-app`: the `prismo` binary and runtime loop
-- `crates/telemetry-core`: telemetry data model, plugin trait, store, and synthetic plugin
+- `crates/telemetry-core`: telemetry data model and store
+- `crates/telemetry-runtime`: Rust source/plugin trait and runtime types
+- `crates/telemetry-synthetic`: synthetic source implementation
 - `crates/telemetry-tui`: layout, rendering, input handling, and help UI
 - `docs/`: project documentation
 
 ## Build and Run
 
 Requirements:
-- Rust toolchain
+- Bazel 8.x
 - a terminal with alternate-screen support
 - OSC 52 clipboard support if you want yank/copy to reach your terminal clipboard
 
 Run:
 
 ```bash
-cargo run -p prismo
+bazel run //:prismo
 ```
 
-Check:
+Build and test:
 
 ```bash
-cargo fmt
-cargo check
+bazel build //...
+bazel test //...
 ```
+
+Cargo manifests are still present because `rules_rust` `crate_universe` reads the workspace dependency graph from [Cargo.toml](/Users/alex/code/alextac98/prismo/Cargo.toml) and [Cargo.lock](/Users/alex/code/alextac98/prismo/Cargo.lock).
 
 ## Controls
 
@@ -93,11 +97,12 @@ Example:
 ## Plugin Model Today
 
 The current plugin boundary is minimal:
+- `telemetry-runtime` defines `SourcePlugin`
 - `SourcePlugin` produces `TelemetryUpdate` messages
 - the app pushes those updates into `TelemetryStore`
 - the TUI renders store snapshots
 
-The synthetic plugin is the only implementation right now. It emits channel descriptors on startup and then periodically emits samples and plugin health.
+The synthetic source in `crates/telemetry-synthetic` is the only implementation right now. It emits channel descriptors on startup and then periodically emits samples and plugin health.
 
 ## Notes About Freshness
 
@@ -107,9 +112,9 @@ The synthetic plugin is the only implementation right now. It emits channel desc
 
 ## Next Likely Steps
 
-- add real source plugins
+- move source selection behind config or CLI arguments
+- add a transport-level contract for external process plugins
 - split transport and decode stages more explicitly
-- add config-driven plugin selection
 - add tests for rendering, store behavior, and plugin contracts
 - define an external plugin protocol for non-Rust implementations
 
