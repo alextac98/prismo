@@ -73,7 +73,7 @@ For the current C++ path:
 - the canonical protocol is still the protobuf stdio contract
 - C++ code talks to a small Diplomat-generated C++ API
 - the Diplomat layer calls into the Rust SDK core
-- `tools/ffi/generate_cpp_bindings.sh` regenerates the checked-in C and C++ bindings when the FFI surface changes
+- Bazel generates the C and C++ bindings during the `cpp_sdk` build, so there is no separate manual regeneration step
 
 ## Add New Renderers
 

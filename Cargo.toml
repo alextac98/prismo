@@ -8,6 +8,7 @@ members = [
     "crates/tui",
     "apps/prismo",
     "plugins/example-rust",
+    "tools/ffi",
 ]
 resolver = "2"
 
@@ -21,6 +22,7 @@ anyhow = "1.0"
 base64 = "0.22"
 crossterm = "0.29"
 diplomat = "0.10.0"
+diplomat-tool = "0.10.0"
 diplomat-runtime = "0.10.0"
 prost = "0.14"
 rand = "0.9"

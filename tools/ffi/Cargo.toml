@@ -1,0 +1,8 @@
+[package]
+name = "prismo-ffi-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+diplomat-tool.workspace = true

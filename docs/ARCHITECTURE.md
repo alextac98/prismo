@@ -157,7 +157,7 @@ Bazel is the primary build system:
 
 The current C++ path is intentionally Rust-backed:
 - `crates/plugin-sdk-ffi` builds a Rust static library
-- checked-in Diplomat-generated C and C++ headers are exported through Bazel
+- Bazel runs a Rust Diplomat codegen tool and exports the generated C and C++ headers
 - `plugins/example-cpp` links that Rust library into a Bazel-built C++ binary
 
 Cargo manifests remain in the repo as dependency metadata and editor/tooling support, not as the primary execution path.

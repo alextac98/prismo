@@ -15,16 +15,38 @@ rust_static_library(
     visibility = ["//visibility:public"],
 )
 
+genrule(
+    name = "generated_bindings",
+    srcs = glob(["src/**/*.rs"]),
+    outs = [
+        "PluginSession.d.h",
+        "PluginSession.h",
+        "PluginSession.d.hpp",
+        "PluginSession.hpp",
+        "diplomat_runtime.h",
+        "diplomat_runtime.hpp",
+    ],
+    tools = ["//tools/ffi:diplomat_codegen_tool"],
+    cmd = """
+set -euo pipefail
+tmp="$(@D)/diplomat_codegen_tmp"
+rm -rf "$$tmp"
+mkdir -p "$$tmp/c" "$$tmp/cpp"
+"$(location //tools/ffi:diplomat_codegen_tool)" "$(location src/lib.rs)" "$$tmp/c" "$$tmp/cpp"
+cp "$$tmp/c/PluginSession.d.h" "$(@D)/PluginSession.d.h"
+cp "$$tmp/c/PluginSession.h" "$(@D)/PluginSession.h"
+cp "$$tmp/c/diplomat_runtime.h" "$(@D)/diplomat_runtime.h"
+cp "$$tmp/cpp/PluginSession.d.hpp" "$(@D)/PluginSession.d.hpp"
+cp "$$tmp/cpp/PluginSession.hpp" "$(@D)/PluginSession.hpp"
+cp "$$tmp/cpp/diplomat_runtime.hpp" "$(@D)/diplomat_runtime.hpp"
+""",
+    visibility = ["//visibility:public"],
+)
+
 cc_library(
     name = "cpp_sdk",
-    hdrs = glob([
-        "generated/c/**/*.h",
-        "generated/cpp/**/*.hpp",
-    ]),
-    includes = [
-        "generated/c",
-        "generated/cpp",
-    ],
+    hdrs = [":generated_bindings"],
+    includes = ["."],
     deps = [":plugin_sdk_ffi_static"],
     visibility = ["//visibility:public"],
 )
