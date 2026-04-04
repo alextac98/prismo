@@ -13,3 +13,17 @@ rust_binary(
     ],
     visibility = ["//visibility:public"],
 )
+
+sh_test(
+    name = "cpp_smoke_test",
+    srcs = ["smoke_test.sh"],
+    args = [
+        "$(rlocationpath :prismo)",
+        "$(rlocationpath //plugins/example-cpp:example_cpp)",
+    ],
+    data = [
+        ":prismo",
+        "//plugins/example-cpp:example_cpp",
+        "@bazel_tools//tools/bash/runfiles",
+    ],
+)

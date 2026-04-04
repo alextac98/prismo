@@ -11,9 +11,10 @@ This directory documents the current `prismo` prototype.
 
 These docs describe what exists in the repository now:
 - a Bazel-built Rust TUI prototype
-- a Rust example source crate
+- Rust and C++ example plugins running through the same subprocess protocol
+- a Rust-backed Diplomat FFI bridge for C++ plugin authors
 - a store-backed viewer with a collapsible channel tree
 - fixed details plus scrollable latest-value content
 - vim-style filter and command prompts
 
-They do not describe a fully implemented external plugin system or production deployment flow yet.
+They still do not describe a production deployment flow or a complete out-of-repo plugin packaging story yet.

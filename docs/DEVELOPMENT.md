@@ -8,10 +8,17 @@ Run the prototype:
 cargo run -q
 ```
 
+Run with the C++ example plugin:
+
+```bash
+cargo run -q -- --config prismo_cpp.toml
+```
+
 Build and test:
 
 ```bash
 cargo test
+bazel test //apps/prismo:cpp_smoke_test
 ```
 
 Format the workspace:
@@ -50,7 +57,9 @@ Start by deciding which boundary you need:
 - `crates/plugin-protocol` for the wire contract
 - `crates/plugin-host` for process supervision and normalization
 - `crates/plugin-sdk-rust` for a Rust authoring helper
+- `crates/plugin-sdk-ffi` for the current C++ authoring bridge
 - `plugins/example-rust` for a reference subprocess plugin
+- `plugins/example-cpp` for a reference C++ subprocess plugin
 
 For a new Rust plugin:
 - ship a plugin manifest with a command entrypoint
@@ -59,6 +68,12 @@ For a new Rust plugin:
 - send descriptors before samples that reference them
 
 Project-local plugin startup now flows through `prismo.toml`.
+
+For the current C++ path:
+- the canonical protocol is still the protobuf stdio contract
+- C++ code talks to a small Diplomat-generated C++ API
+- the Diplomat layer calls into the Rust SDK core
+- `tools/ffi/generate_cpp_bindings.sh` regenerates the checked-in C and C++ bindings when the FFI surface changes
 
 ## Add New Renderers
 
@@ -94,13 +109,17 @@ Likely future expansions:
 - snapshot-test the TUI rendering surface
 - separate transport ingestion from decode logic
 - introduce a decoder plugin trait
-- add Python and C++ SDKs on top of the shared protobuf protocol
+- add a Python SDK on top of the shared protobuf protocol
 
 ## Notes For Future Multi-Language Plugins
 
 The runtime is already subprocess-based and protocol-first.
 
-That means Python and C++ support can be added by:
+That means new language support can be added by:
 - keeping the same protobuf message contract
 - providing language-specific SDKs
 - reusing the same project-local manifest and `prismo.toml` configuration model
+
+The repo now demonstrates this in two ways:
+- Rust plugins through `crates/plugin-sdk-rust`
+- C++ plugins through `crates/plugin-sdk-ffi` and the generated Diplomat bindings

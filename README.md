@@ -5,9 +5,9 @@
 `prismo` is a terminal telemetry viewer prototype written in Rust for embedded and target-side debugging.
 
 The current prototype is intentionally small:
-- a Rust workspace with a TUI app, an internal telemetry core, a protobuf-based plugin protocol, and a Rust example plugin
+- a Rust workspace with a TUI app, an internal telemetry core, a protobuf-based plugin protocol, and example Rust and C++ plugins
 - a two-pane telemetry UI built with `ratatui` and `crossterm`
-- a subprocess example plugin that generates randomized telemetry so the UI can be developed without a live target
+- subprocess example plugins that generate randomized or synthetic telemetry so the UI can be developed without a live target
 - a workspace split that keeps app wiring, UI, and telemetry contracts separate
 
 ## Current State
@@ -27,7 +27,7 @@ The app already supports:
 - a help overlay
 - a minimum supported window size with a fallback message
 
-The current source is the Rust example plugin only, but it already runs through the same subprocess protocol path intended for future Python and C++ plugins.
+The current examples are the Rust and C++ plugins, and both run through the same subprocess protocol path.
 
 ## Workspace Layout
 
@@ -35,7 +35,9 @@ The current source is the Rust example plugin only, but it already runs through 
 - `crates/core`: internal telemetry data model, store, and runtime snapshots
 - `crates/plugin-protocol`: protobuf messages, framing, manifests, and project-local config
 - `crates/plugin-host`: subprocess supervision and wire-message normalization
+- `crates/plugin-sdk-ffi`: Diplomat-backed FFI surface for C++ plugin authors
 - `crates/plugin-sdk-rust`: Rust plugin authoring helper
+- `plugins/example-cpp`: C++ example plugin built through Bazel and the FFI SDK
 - `crates/tui`: layout, rendering, input handling, and help UI
 - `plugins/example-rust`: Rust example plugin implementation
 - `docs/`: project documentation
@@ -52,10 +54,17 @@ Run:
 cargo run -q
 ```
 
+Run the C++ example plugin:
+
+```bash
+cargo run -q -- --config prismo_cpp.toml
+```
+
 Build and test:
 
 ```bash
 cargo test
+bazel test //apps/prismo:cpp_smoke_test
 ```
 
 Format:
@@ -108,7 +117,7 @@ The current plugin boundary is protocol-first:
 - the host normalizes those frames into internal telemetry updates
 - the TUI renders store snapshots
 
-The example source in `plugins/example-rust` is the only implementation right now. It emits channel descriptors on startup and then periodically emits samples and plugin health over the shared protocol.
+Reference implementations live in `plugins/example-rust` and `plugins/example-cpp`. They emit channel descriptors on startup and then periodically emit samples and plugin health over the shared protocol.
 
 ## Notes About Freshness
 
@@ -119,7 +128,7 @@ The example source in `plugins/example-rust` is the only implementation right no
 ## Next Likely Steps
 
 - split transport and decode stages more explicitly
-- add Python and C++ SDKs on top of the shared protocol
+- add a Python SDK on top of the shared protocol
 - add tests for rendering, store behavior, and plugin contracts
 
 ## Docs

@@ -1,0 +1,15 @@
+[package]
+name = "prismo-plugin-sdk-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[dependencies]
+anyhow.workspace = true
+diplomat.workspace = true
+diplomat-runtime.workspace = true
+prismo-plugin-protocol = { path = "../plugin-protocol" }
+prismo-plugin-sdk-rust = { path = "../plugin-sdk-rust" }

@@ -48,10 +48,21 @@ This crate owns:
 
 This crate is the first plugin authoring SDK for the subprocess protocol.
 
+## `crates/plugin-sdk-ffi`
+
+This crate exposes a small Diplomat-backed FFI surface on top of the Rust SDK core.
+It exists so C++ plugins can reuse the same stdio framing and protobuf implementation
+without reimplementing the protocol natively yet.
+
 ## `plugins/example-rust`
 
 This crate contains the current Rust example plugin implementation.
 It now runs as a subprocess plugin over the shared wire protocol.
+
+## `plugins/example-cpp`
+
+This target contains the current C++ example plugin implementation.
+It links against the generated Diplomat C++ bindings and the Rust-backed FFI SDK.
 
 ## `crates/tui`
 
@@ -129,7 +140,7 @@ Today the plugin model is subprocess-first:
 - the plugin writes framed protobuf messages on `stdout`
 - free-form logs go to `stderr`
 
-The example Rust plugin sends:
+The current Rust and C++ example plugins send:
 - `Hello` on startup
 - `DeclareChannels` once
 - randomized `SampleBatch` messages on each interval tick
@@ -140,8 +151,14 @@ The example Rust plugin sends:
 Bazel is the primary build system:
 - `MODULE.bazel` pins the Bazel module graph
 - `rules_rust` provides the hermetic Rust toolchain
+- `toolchains_llvm` provides the hermetic C++ toolchain used for the in-repo C++ plugin
 - `crate_universe` reads the Cargo workspace metadata and resolves external Rust crates for Bazel
 - each workspace package has its own `BUILD.bazel`
+
+The current C++ path is intentionally Rust-backed:
+- `crates/plugin-sdk-ffi` builds a Rust static library
+- checked-in Diplomat-generated C and C++ headers are exported through Bazel
+- `plugins/example-cpp` links that Rust library into a Bazel-built C++ binary
 
 Cargo manifests remain in the repo as dependency metadata and editor/tooling support, not as the primary execution path.
 

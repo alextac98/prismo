@@ -1,0 +1,9 @@
+schema_version = 1
+plugin_id = "example-cpp"
+display_name = "Example C++ Plugin"
+plugin_version = "0.1.0"
+protocol_version = 1
+language = "cpp"
+
+[entrypoint]
+argv = ["./bazel-bin/plugins/example-cpp/example_cpp"]
