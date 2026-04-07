@@ -1,5 +1,0 @@
-[[plugins]]
-plugin_id = "example-cpp"
-manifest = "./plugins/example-cpp/prismo-plugin.toml"
-enabled = true
-restart = "on-failure"

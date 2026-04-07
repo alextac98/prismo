@@ -33,8 +33,11 @@ fi
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 
-manifest_path="${tmp_dir}/example-cpp-plugin.toml"
-config_path="${tmp_dir}/prismo.toml"
+plugins_dir="${tmp_dir}/plugins"
+plugin_dir="${plugins_dir}/example-cpp"
+manifest_path="${plugin_dir}/prismo-plugin.toml"
+
+mkdir -p "${plugin_dir}"
 
 cat > "${manifest_path}" <<EOF
 schema_version = 1
@@ -48,12 +51,4 @@ language = "cpp"
 argv = ["${plugin_path}"]
 EOF
 
-cat > "${config_path}" <<EOF
-[[plugins]]
-plugin_id = "example-cpp"
-manifest = "${manifest_path}"
-enabled = true
-restart = "on-failure"
-EOF
-
-"${app_path}" smoke-test --config "${config_path}" --plugin-id example-cpp --timeout-ms 5000
+"${app_path}" smoke-test --plugins "${plugins_dir}" --plugin-id example-cpp --timeout-ms 5000

@@ -5,13 +5,13 @@
 Run the prototype:
 
 ```bash
-cargo run -q
+cargo run -q -- --plugins ./plugins/example-rust
 ```
 
 Run with the C++ example plugin:
 
 ```bash
-cargo run -q -- --config prismo_cpp.toml
+cargo run -q -- --plugins ./plugins/example-cpp
 ```
 
 Build and test:
@@ -67,7 +67,10 @@ For a new Rust plugin:
 - emit `Hello`, `DeclareChannels`, `SampleBatch`, and optional `Health`
 - send descriptors before samples that reference them
 
-Project-local plugin startup now flows through `prismo.toml`.
+The normal runtime path is now discovery-first:
+- bundle plugins under `./plugins` relative to the `prismo` executable
+- use `--plugins /path/to/plugins` when you want to point `prismo` at a different plugin directory
+- for local repo development, point `--plugins` at the specific example plugin directory you want to run
 
 For the current C++ path:
 - the canonical protocol is still the protobuf stdio contract
@@ -118,7 +121,7 @@ The runtime is already subprocess-based and protocol-first.
 That means new language support can be added by:
 - keeping the same protobuf message contract
 - providing language-specific SDKs
-- reusing the same project-local manifest and `prismo.toml` configuration model
+- reusing the same manifest and bundle layout model
 
 The repo now demonstrates this in two ways:
 - Rust plugins through `crates/plugin-sdk-rust`

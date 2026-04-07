@@ -1,6 +1,6 @@
 use std::io;
 use std::io::Write;
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -35,9 +35,9 @@ fn main() -> Result<()> {
         .without_time()
         .init();
 
-    let config_path = config_path_from_args(&args);
+    let plugins_dir = plugins_dir_from_args(&args)?;
     let (tx, rx) = mpsc::channel();
-    let host = PluginHost::start(config_path, tx, std::env::current_exe()?)?;
+    let host = PluginHost::start(tx, std::env::current_exe()?, plugins_dir)?;
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -61,24 +61,9 @@ fn main() -> Result<()> {
     result
 }
 
-fn config_path_from_args(args: &[String]) -> &Path {
-    let mut index = 0;
-    while index < args.len() {
-        if args[index] == "--config" {
-            if let Some(path) = args.get(index + 1) {
-                return Path::new(path);
-            }
-            break;
-        }
-        index += 1;
-    }
-
-    Path::new("prismo.toml")
-}
-
 fn run_smoke_test_from_args(args: &[String]) -> Result<()> {
-    let config_path = config_path_from_args(args);
     let plugin_id = required_arg_value(args, "--plugin-id")?;
+    let plugins_dir = plugins_dir_from_args(args)?;
     let timeout = match optional_arg_value(args, "--timeout-ms")? {
         Some(value) => Duration::from_millis(
             value
@@ -89,10 +74,14 @@ fn run_smoke_test_from_args(args: &[String]) -> Result<()> {
     };
 
     let (tx, rx) = mpsc::channel();
-    let host = PluginHost::start(config_path, tx, std::env::current_exe()?)?;
+    let host = PluginHost::start(tx, std::env::current_exe()?, plugins_dir)?;
     let result = wait_for_plugin_sample(&rx, plugin_id, timeout);
     host.shutdown();
     result
+}
+
+fn plugins_dir_from_args(args: &[String]) -> Result<Option<PathBuf>> {
+    optional_arg_value(args, "--plugins").map(|value| value.map(PathBuf::from))
 }
 
 fn wait_for_plugin_sample(

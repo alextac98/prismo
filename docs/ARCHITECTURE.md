@@ -33,7 +33,7 @@ This crate owns the external plugin contract:
 - protobuf message types
 - length-prefixed frame helpers
 - plugin manifest parsing
-- project-local runtime config parsing
+- plugin discovery
 
 ## `crates/plugin-host`
 
@@ -81,7 +81,8 @@ It renders from `StoreSnapshot` only. It does not talk directly to plugins.
 ## `apps/prismo`
 
 This crate is the executable:
-- loads project-local config from `prismo.toml`
+- accepts an optional `--plugins` override directory
+- auto-discovers plugins from a sibling `plugins/` directory by default
 - starts plugin subprocesses through `plugin-host`
 - receives `RuntimeEvent` values through a channel
 - applies normalized telemetry to `TelemetryStore`
@@ -97,13 +98,14 @@ plugin subprocess -> stdio + protobuf -> plugin-host -> RuntimeEvent -> app -> T
 ```
 
 Detailed flow:
-1. The app reads `prismo.toml`.
-2. The host resolves each configured plugin manifest and spawns the plugin subprocess.
-3. The host sends `Init` on `stdin` and validates the child's `Hello`.
-4. The host normalizes plugin messages into `RuntimeEvent` values.
-5. The main loop drains pending events with `try_recv`.
-6. The store applies descriptors, samples, plugin health, and runtime state.
-7. The TUI renders from the latest snapshot.
+1. The app resolves the plugin directory from `--plugins` or from a sibling `plugins/` directory.
+2. The host discovers plugin manifests in that directory.
+3. The host spawns each discovered plugin subprocess.
+4. The host sends `Init` on `stdin` and validates the child's `Hello`.
+5. The host normalizes plugin messages into `RuntimeEvent` values.
+6. The main loop drains pending events with `try_recv`.
+7. The store applies descriptors, samples, plugin health, and runtime state.
+8. The TUI renders from the latest snapshot.
 
 ## Telemetry Model
 

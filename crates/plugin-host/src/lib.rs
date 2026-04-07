@@ -11,8 +11,8 @@ use prismo_core::{
     PluginRuntimeState, PluginStatusUpdate, RuntimeEvent, TelemetryUpdate,
 };
 use prismo_plugin_protocol::{
-    AppConfig, Envelope, Health, Init, Message, PluginConfig, PluginManifest, RestartPolicy,
-    ValueKind, load_plugin_manifest, read_delimited, write_delimited,
+    DiscoveredPlugin, Envelope, Health, Init, Message, PluginManifest, ValueKind,
+    default_plugin_dir, discover_plugins, read_delimited, write_delimited,
 };
 
 const PROTOCOL_VERSION: u32 = 1;
@@ -26,48 +26,24 @@ pub struct PluginHost {
 
 impl PluginHost {
     pub fn start(
-        config_path: &Path,
         tx: Sender<RuntimeEvent>,
         current_exe: PathBuf,
+        plugins_dir: Option<PathBuf>,
     ) -> Result<Self> {
-        let config = prismo_plugin_protocol::load_app_config(config_path)?;
-        Self::from_config(config, config_path, tx, current_exe)
-    }
-
-    fn from_config(
-        config: AppConfig,
-        config_path: &Path,
-        tx: Sender<RuntimeEvent>,
-        current_exe: PathBuf,
-    ) -> Result<Self> {
-        let config_dir = config_path
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."));
+        let resolved_plugins = resolve_plugins(&current_exe, plugins_dir)?;
         let mut shutdown_senders = Vec::new();
         let mut join_handles = Vec::new();
 
-        for plugin in config.plugins.into_iter().filter(|plugin| plugin.enabled) {
-            let manifest_path = config_dir.join(&plugin.manifest);
-            let manifest = load_plugin_manifest(&manifest_path)?;
-            if manifest.plugin_id != plugin.plugin_id {
-                bail!(
-                    "plugin_id mismatch between config ({}) and manifest ({})",
-                    plugin.plugin_id,
-                    manifest.plugin_id
-                );
-            }
-
+        for resolved in resolved_plugins {
             let (shutdown_tx, shutdown_rx) = mpsc::channel();
             let thread_tx = tx.clone();
             let current_exe = current_exe.clone();
-            let config_dir = config_dir.clone();
 
             let handle = thread::spawn(move || {
                 if let Err(error) = supervise_plugin(
-                    plugin,
-                    manifest,
-                    config_dir,
+                    resolved.runtime,
+                    resolved.manifest,
+                    resolved.manifest_dir,
                     current_exe,
                     thread_tx.clone(),
                     shutdown_rx,
@@ -104,6 +80,18 @@ impl PluginHost {
     }
 }
 
+#[derive(Clone)]
+struct ResolvedPlugin {
+    runtime: PluginRuntime,
+    manifest: PluginManifest,
+    manifest_dir: PathBuf,
+}
+
+#[derive(Clone)]
+struct PluginRuntime {
+    plugin_id: String,
+}
+
 enum SupervisorCommand {
     Shutdown,
 }
@@ -130,7 +118,7 @@ impl std::fmt::Display for PluginError {
 impl std::error::Error for PluginError {}
 
 fn supervise_plugin(
-    plugin: PluginConfig,
+    plugin: PluginRuntime,
     manifest: PluginManifest,
     config_dir: PathBuf,
     current_exe: PathBuf,
@@ -184,7 +172,7 @@ fn supervise_plugin(
                     message.clone(),
                 );
 
-                if should_restart(&plugin.restart, crashed) {
+                if should_restart(crashed) {
                     restart_count += 1;
                     thread::sleep(RESTART_DELAY);
                 } else {
@@ -200,7 +188,7 @@ fn supervise_plugin(
                     restart_count,
                     Some(message.clone()),
                 );
-                if should_restart(&plugin.restart, true) {
+                if should_restart(true) {
                     restart_count += 1;
                     thread::sleep(RESTART_DELAY);
                 } else {
@@ -223,14 +211,14 @@ enum LoopControl {
 }
 
 fn start_plugin_process(
-    plugin: &PluginConfig,
+    plugin: &PluginRuntime,
     manifest: &PluginManifest,
-    config_dir: &Path,
+    manifest_dir: &Path,
     current_exe: &Path,
     tx: Sender<RuntimeEvent>,
     shutdown_rx: &Receiver<SupervisorCommand>,
 ) -> Result<LoopControl> {
-    let command = resolve_command(&manifest.entrypoint.argv, config_dir, current_exe)?;
+    let command = resolve_command(&manifest.entrypoint.argv, manifest_dir, current_exe)?;
     let mut child = spawn_child(&command)?;
 
     let mut stdin = BufWriter::new(child.stdin.take().context("spawned plugin missing stdin")?);
@@ -239,8 +227,7 @@ fn start_plugin_process(
         protocol_version: PROTOCOL_VERSION,
         instance_id: plugin.plugin_id.clone(),
         plugin_id: plugin.plugin_id.clone(),
-        config_json: serde_json::to_string(&plugin.config_json())
-            .context("failed to encode plugin config json")?,
+        config_json: "{}".to_string(),
     };
     write_delimited(
         &mut stdin,
@@ -421,7 +408,11 @@ fn start_plugin_process(
     }
 }
 
-fn resolve_command(argv: &[String], config_dir: &Path, current_exe: &Path) -> Result<Vec<String>> {
+fn resolve_command(
+    argv: &[String],
+    manifest_dir: &Path,
+    current_exe: &Path,
+) -> Result<Vec<String>> {
     if argv.is_empty() {
         bail!("plugin manifest entrypoint argv cannot be empty");
     }
@@ -433,12 +424,41 @@ fn resolve_command(argv: &[String], config_dir: &Path, current_exe: &Path) -> Re
             if index == 0 && arg == SELF_ENTRYPOINT {
                 current_exe.display().to_string()
             } else if index == 0 {
-                config_dir.join(arg).display().to_string()
+                manifest_dir.join(arg).display().to_string()
             } else {
                 arg.clone()
             }
         })
         .collect::<Vec<_>>())
+}
+
+fn resolve_plugins(
+    current_exe: &Path,
+    plugins_dir: Option<PathBuf>,
+) -> Result<Vec<ResolvedPlugin>> {
+    let search_dir = match plugins_dir {
+        Some(path) => path,
+        None => default_plugin_dir(current_exe)?,
+    };
+    let mut resolved = discover_plugins(&search_dir)?
+        .into_iter()
+        .map(resolved_from_discovery)
+        .collect::<Vec<_>>();
+    resolved.sort_by(|left, right| left.runtime.plugin_id.cmp(&right.runtime.plugin_id));
+    Ok(resolved)
+}
+
+fn resolved_from_discovery(plugin: DiscoveredPlugin) -> ResolvedPlugin {
+    let plugin_id = plugin.manifest.plugin_id.clone();
+    ResolvedPlugin {
+        runtime: PluginRuntime { plugin_id },
+        manifest: plugin.manifest,
+        manifest_dir: plugin
+            .manifest_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from(".")),
+    }
 }
 
 fn spawn_child(command: &[String]) -> Result<Child> {
@@ -488,7 +508,7 @@ fn spawn_stderr_reader(stderr: impl std::io::Read + Send + 'static, tx: Sender<R
 }
 
 fn validate_hello(
-    plugin: &PluginConfig,
+    plugin: &PluginRuntime,
     manifest: &PluginManifest,
     hello: &prismo_plugin_protocol::Hello,
 ) -> Result<()> {
@@ -519,6 +539,67 @@ fn validate_plugin_id(expected: &str, actual: &str) -> Result<()> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::{resolve_command, resolve_plugins};
+
+    #[test]
+    fn resolves_entrypoint_relative_to_manifest_dir() {
+        let command = resolve_command(
+            &[String::from("./bin/example")],
+            Path::new("/tmp/prismo/plugins/example"),
+            Path::new("/tmp/prismo/bin/prismo"),
+        )
+        .expect("resolve command");
+
+        assert_eq!(command, vec!["/tmp/prismo/plugins/example/./bin/example"]);
+    }
+
+    #[test]
+    fn discovers_plugins_relative_to_current_executable() {
+        let root = unique_temp_path("prismo-host-discovery");
+        let plugin_dir = root.join("plugins").join("test-plugin");
+        fs::create_dir_all(&plugin_dir).expect("create plugin dir");
+        fs::write(
+            plugin_dir.join("prismo-plugin.toml"),
+            r#"
+schema_version = 1
+plugin_id = "test-plugin"
+display_name = "Test Plugin"
+plugin_version = "0.1.0"
+protocol_version = 1
+language = "rust"
+
+[entrypoint]
+argv = ["./bin/test-plugin"]
+"#,
+        )
+        .expect("write manifest");
+
+        let resolved = resolve_plugins(&root.join("prismo"), None).expect("resolve plugins");
+
+        assert!(resolved.iter().any(|plugin| {
+            plugin.runtime.plugin_id == "test-plugin"
+                && plugin.manifest_dir == plugin_dir
+                && plugin.manifest.plugin_id == "test-plugin"
+        }));
+    }
+
+    fn unique_temp_path(prefix: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        path.push(format!("{}-{}-{}", prefix, std::process::id(), nanos));
+        path
+    }
+}
+
 fn decode_value(value: Option<prismo_plugin_protocol::Value>) -> Result<ChannelValue> {
     match value.and_then(|value| value.kind) {
         Some(ValueKind::BoolValue(value)) => Ok(ChannelValue::Bool(value)),
@@ -530,12 +611,8 @@ fn decode_value(value: Option<prismo_plugin_protocol::Value>) -> Result<ChannelV
     }
 }
 
-fn should_restart(policy: &RestartPolicy, crashed: bool) -> bool {
-    match policy {
-        RestartPolicy::Never => false,
-        RestartPolicy::Always => true,
-        RestartPolicy::OnFailure => crashed,
-    }
+fn should_restart(crashed: bool) -> bool {
+    crashed
 }
 
 fn send_status(

@@ -1,37 +1,9 @@
-use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map as JsonMap, Value as JsonValue};
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct AppConfig {
-    #[serde(default)]
-    pub plugins: Vec<PluginConfig>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct PluginConfig {
-    pub plugin_id: String,
-    pub manifest: String,
-    #[serde(default = "enabled_by_default")]
-    pub enabled: bool,
-    #[serde(default)]
-    pub restart: RestartPolicy,
-    #[serde(default)]
-    pub config: BTreeMap<String, toml::Value>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub enum RestartPolicy {
-    #[default]
-    OnFailure,
-    Never,
-    Always,
-}
+use serde_json::Value as JsonValue;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct PluginManifest {
@@ -49,27 +21,17 @@ pub struct EntrypointConfig {
     pub argv: Vec<String>,
 }
 
+#[derive(Clone, Debug)]
+pub struct DiscoveredPlugin {
+    pub manifest_path: PathBuf,
+    pub manifest: PluginManifest,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct InitPayload {
     pub instance_id: String,
     pub plugin_id: String,
     pub config: JsonValue,
-}
-
-pub fn load_app_config(path: &Path) -> Result<AppConfig> {
-    let raw = fs::read_to_string(path)
-        .with_context(|| format!("failed to read app config {}", path.display()))?;
-    let config = toml::from_str::<AppConfig>(&raw)
-        .with_context(|| format!("failed to parse app config {}", path.display()))?;
-
-    let mut seen = BTreeMap::new();
-    for plugin in &config.plugins {
-        if seen.insert(plugin.plugin_id.clone(), ()).is_some() {
-            bail!("duplicate plugin_id in app config: {}", plugin.plugin_id);
-        }
-    }
-
-    Ok(config)
 }
 
 pub fn load_plugin_manifest(path: &Path) -> Result<PluginManifest> {
@@ -79,61 +41,150 @@ pub fn load_plugin_manifest(path: &Path) -> Result<PluginManifest> {
         .with_context(|| format!("failed to parse plugin manifest {}", path.display()))
 }
 
-impl PluginConfig {
-    pub fn config_json(&self) -> JsonValue {
-        JsonValue::Object(
-            self.config
-                .iter()
-                .map(|(key, value)| (key.clone(), toml_to_json(value)))
-                .collect::<JsonMap<String, JsonValue>>(),
-        )
+pub fn default_plugin_dir(current_exe: &Path) -> Result<PathBuf> {
+    current_exe
+        .parent()
+        .map(|dir| dir.join("plugins"))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "failed to resolve parent directory for {}",
+                current_exe.display()
+            )
+        })
+}
+
+pub fn discover_plugins(search_dir: &Path) -> Result<Vec<DiscoveredPlugin>> {
+    if !search_dir.exists() {
+        return Ok(Vec::new());
     }
-}
 
-fn enabled_by_default() -> bool {
-    true
-}
+    let mut discovered = Vec::new();
 
-fn toml_to_json(value: &toml::Value) -> JsonValue {
-    match value {
-        toml::Value::String(value) => JsonValue::String(value.clone()),
-        toml::Value::Integer(value) => JsonValue::Number((*value).into()),
-        toml::Value::Float(value) => serde_json::Number::from_f64(*value)
-            .map(JsonValue::Number)
-            .unwrap_or(JsonValue::Null),
-        toml::Value::Boolean(value) => JsonValue::Bool(*value),
-        toml::Value::Datetime(value) => JsonValue::String(value.to_string()),
-        toml::Value::Array(items) => {
-            JsonValue::Array(items.iter().map(toml_to_json).collect::<Vec<_>>())
+    let root_manifest = search_dir.join("prismo-plugin.toml");
+    if root_manifest.is_file() {
+        discovered.push(DiscoveredPlugin {
+            manifest: load_plugin_manifest(&root_manifest)?,
+            manifest_path: root_manifest,
+        });
+    } else {
+        for entry in fs::read_dir(search_dir)
+            .with_context(|| format!("failed to read plugin directory {}", search_dir.display()))?
+        {
+            let entry = entry
+                .with_context(|| format!("failed to read entry in {}", search_dir.display()))?;
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+
+            let manifest_path = path.join("prismo-plugin.toml");
+            if !manifest_path.is_file() {
+                continue;
+            }
+
+            discovered.push(DiscoveredPlugin {
+                manifest: load_plugin_manifest(&manifest_path)?,
+                manifest_path,
+            });
         }
-        toml::Value::Table(table) => JsonValue::Object(
-            table
-                .iter()
-                .map(|(key, value)| (key.clone(), toml_to_json(value)))
-                .collect::<JsonMap<String, JsonValue>>(),
-        ),
     }
+
+    discovered.sort_by(|left, right| left.manifest.plugin_id.cmp(&right.manifest.plugin_id));
+    validate_unique_plugin_ids(&discovered)?;
+    Ok(discovered)
+}
+
+fn validate_unique_plugin_ids(discovered: &[DiscoveredPlugin]) -> Result<()> {
+    for (index, plugin) in discovered.iter().enumerate() {
+        for other in &discovered[index + 1..] {
+            if plugin.manifest.plugin_id == other.manifest.plugin_id {
+                bail!(
+                    "duplicate discovered plugin_id {} in {} and {}",
+                    plugin.manifest.plugin_id,
+                    plugin.manifest_path.display(),
+                    other.manifest_path.display()
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::PluginConfig;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::{default_plugin_dir, discover_plugins};
 
     #[test]
-    fn converts_plugin_config_to_json() {
-        let config = toml::from_str::<PluginConfig>(
-            r#"
-plugin_id = "example-rust"
-manifest = "./plugins/example-rust/prismo-plugin.toml"
+    fn resolves_plugin_dir_relative_to_executable() {
+        let dir = default_plugin_dir(Path::new("/tmp/prismo")).expect("plugin dir");
+        assert_eq!(dir, PathBuf::from("/tmp/plugins"));
+    }
 
-[config]
-tick_ms = 150
-name = "demo"
+    #[test]
+    fn discovers_plugins_one_level_down() {
+        let root = unique_temp_path("prismo-discovery");
+        let plugin_dir = root.join("example");
+        fs::create_dir_all(&plugin_dir).expect("create plugin dir");
+        fs::write(
+            plugin_dir.join("prismo-plugin.toml"),
+            r#"
+schema_version = 1
+plugin_id = "example"
+display_name = "Example"
+plugin_version = "0.1.0"
+protocol_version = 1
+language = "rust"
+
+[entrypoint]
+argv = ["./example"]
 "#,
         )
-        .expect("plugin config");
+        .expect("write manifest");
 
-        assert_eq!(config.config_json()["tick_ms"], 150);
-        assert_eq!(config.config_json()["name"], "demo");
+        let discovered = discover_plugins(&root).expect("discover plugins");
+        assert_eq!(discovered.len(), 1);
+        assert_eq!(discovered[0].manifest.plugin_id, "example");
     }
+
+    #[test]
+    fn discovers_single_plugin_directory() {
+        let root = unique_temp_path("prismo-single-plugin");
+        fs::create_dir_all(&root).expect("create root");
+        fs::write(
+            root.join("prismo-plugin.toml"),
+            r#"
+schema_version = 1
+plugin_id = "single"
+display_name = "Single"
+plugin_version = "0.1.0"
+protocol_version = 1
+language = "cpp"
+
+[entrypoint]
+argv = ["./single"]
+"#,
+        )
+        .expect("write manifest");
+
+        let discovered = discover_plugins(&root).expect("discover plugin");
+        assert_eq!(discovered.len(), 1);
+        assert_eq!(discovered[0].manifest.plugin_id, "single");
+    }
+
+    fn unique_temp_path(prefix: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        path.push(format!("{}-{}-{}", prefix, std::process::id(), nanos));
+        path
+    }
+
+    use std::path::Path;
 }

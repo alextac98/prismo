@@ -33,7 +33,7 @@ The current examples are the Rust and C++ plugins, and both run through the same
 
 - `apps/prismo`: the `prismo` binary and runtime loop
 - `crates/core`: internal telemetry data model, store, and runtime snapshots
-- `crates/plugin-protocol`: protobuf messages, framing, manifests, and project-local config
+- `crates/plugin-protocol`: protobuf messages, framing, manifests, and plugin discovery
 - `crates/plugin-host`: subprocess supervision and wire-message normalization
 - `crates/plugin-sdk-ffi`: Diplomat-backed FFI surface for C++ plugin authors
 - `crates/plugin-sdk-rust`: Rust plugin authoring helper
@@ -51,13 +51,17 @@ Requirements:
 Run:
 
 ```bash
-cargo run -q
+cargo run -q -- --plugins ./plugins/example-rust
 ```
+
+`prismo` now auto-discovers plugins from:
+- `./plugins` relative to the `prismo` executable
+- or an explicit `--plugins /path/to/plugins` override
 
 Run the C++ example plugin:
 
 ```bash
-cargo run -q -- --config prismo_cpp.toml
+cargo run -q -- --plugins ./plugins/example-cpp
 ```
 
 Build and test:
@@ -116,6 +120,7 @@ The current plugin boundary is protocol-first:
 - `stdin` / `stdout` carry length-prefixed protobuf frames
 - the host normalizes those frames into internal telemetry updates
 - the TUI renders store snapshots
+- plugins are discovered from a sibling `plugins/` directory or an explicit `--plugins` override
 
 Reference implementations live in `plugins/example-rust` and `plugins/example-cpp`. They emit channel descriptors on startup and then periodically emit samples and plugin health over the shared protocol.
 
