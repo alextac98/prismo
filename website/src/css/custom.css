@@ -1,0 +1,76 @@
+:root {
+  --ifm-color-primary: #176b61;
+  --ifm-color-primary-dark: #14584f;
+  --ifm-color-primary-darker: #124d46;
+  --ifm-color-primary-darkest: #0d3b35;
+  --ifm-color-primary-light: #1c8377;
+  --ifm-color-primary-lighter: #21978a;
+  --ifm-color-primary-lightest: #36b8a8;
+  --ifm-background-color: #f4f2eb;
+  --ifm-background-surface-color: #fffdfa;
+  --ifm-navbar-background-color: rgba(255, 253, 250, 0.9);
+  --ifm-footer-background-color: #1e2426;
+  --ifm-heading-color: #172022;
+  --ifm-font-family-base: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  --ifm-heading-font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --ifm-font-family-monospace: "SF Mono", "Monaco", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  --ifm-code-font-size: 95%;
+  --ifm-global-radius: 16px;
+  --ifm-pre-background: #132022;
+  --ifm-pre-color: #e9f6f3;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #54c4b6;
+  --ifm-color-primary-dark: #39b4a4;
+  --ifm-color-primary-darker: #2aa192;
+  --ifm-color-primary-darkest: #1f7e72;
+  --ifm-color-primary-light: #6fd2c6;
+  --ifm-color-primary-lighter: #86dcd2;
+  --ifm-color-primary-lightest: #ace9e2;
+  --ifm-background-color: #141b1d;
+  --ifm-background-surface-color: #1d2527;
+  --ifm-navbar-background-color: rgba(20, 27, 29, 0.9);
+  --ifm-heading-color: #f2f1eb;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(54, 184, 168, 0.12), transparent 32%),
+    radial-gradient(circle at top right, rgba(23, 107, 97, 0.08), transparent 28%),
+    var(--ifm-background-color);
+}
+
+.navbar {
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(23, 107, 97, 0.08);
+}
+
+.navbar__title {
+  font-family: var(--ifm-heading-font-family);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.theme-doc-markdown > h1,
+.theme-doc-markdown > h2,
+.theme-doc-markdown > h3 {
+  letter-spacing: 0.01em;
+}
+
+.theme-code-block,
+pre {
+  border-radius: 18px;
+}
+
+.button.button--secondary {
+  color: #172022;
+}
+
+[data-theme='dark'] .button.button--secondary {
+  color: #0f1416;
+}

@@ -1,7 +1,9 @@
 /target
 .bazel-cache
-bazel-bin
-bazel-out
-bazel-prismo
-bazel-testlogs
+bazel-*
 .DS_Store
+
+# Ignore JS files
+**/node_modules/
+**/.docusaurus/
+**/build/

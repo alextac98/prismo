@@ -8,6 +8,8 @@ bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_cc", version = "0.2.14")
 bazel_dep(name = "rules_rust", version = "0.67.0")
 bazel_dep(name = "aspect_rules_lint", version = "2.3.0")
+bazel_dep(name = "aspect_rules_js", version = "2.6.0")
+bazel_dep(name = "rules_nodejs", version = "6.5.2")
 bazel_dep(name = "toolchains_llvm", version = "1.6.0")
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
@@ -33,3 +35,20 @@ crate.from_cargo(
     manifests = ["//:Cargo.toml"],
 )
 use_repo(crate, "crates")
+
+node = use_extension(
+    "@rules_nodejs//nodejs:extensions.bzl",
+    "node",
+    dev_dependency = True,
+)
+node.toolchain(node_version = "20.13.1")
+
+npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm")
+npm.npm_translate_lock(
+    name = "npm",
+    pnpm_lock = "//website:pnpm-lock.yaml",
+)
+use_repo(npm, "npm")
+
+pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm")
+use_repo(pnpm, "pnpm")

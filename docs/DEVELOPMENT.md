@@ -1,4 +1,11 @@
-# prismo Development
+---
+id: development
+title: Development
+slug: /development
+description: Local workflow, extension points, and implementation notes.
+---
+
+# Development
 
 ## Local Workflow
 

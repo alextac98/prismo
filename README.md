@@ -4,6 +4,18 @@
 
 `prismo` is a terminal telemetry viewer prototype written in Rust for embedded and target-side debugging.
 
+## Website and Docs
+
+The project website is built with Docusaurus from [website/](website/), and it
+uses the markdown files in [docs/](docs/) as the source for the `/docs`
+section of the site.
+
+Build the static site with:
+
+```bash
+bazel build //website:site
+```
+
 The current prototype is intentionally small:
 - a Rust workspace with a TUI app, an internal telemetry core, a protobuf-based plugin protocol, and example Rust and C++ plugins
 - a two-pane telemetry UI built with `ratatui` and `crossterm`
@@ -80,7 +92,7 @@ Format:
 cargo fmt
 ```
 
-Cargo manifests are still present because `rules_rust` `crate_universe` reads the workspace dependency graph from [Cargo.toml](/Users/alex/code/alextac98/prismo/Cargo.toml) and [Cargo.lock](/Users/alex/code/alextac98/prismo/Cargo.lock).
+Cargo manifests are still present because `rules_rust` `crate_universe` reads the workspace dependency graph from [Cargo.toml](Cargo.toml) and [Cargo.lock](Cargo.lock).
 
 ## Controls
 
@@ -142,6 +154,8 @@ Reference implementations live in `plugins/example-rust` and `plugins/example-cp
 
 ## Docs
 
-- [docs/README.md](/Users/alex/code/alextac98/prismo/docs/README.md)
-- [docs/ARCHITECTURE.md](/Users/alex/code/alextac98/prismo/docs/ARCHITECTURE.md)
-- [docs/DEVELOPMENT.md](/Users/alex/code/alextac98/prismo/docs/DEVELOPMENT.md)
+- [website/](website/)
+- [docs/README.md](docs/README.md)
+- [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
