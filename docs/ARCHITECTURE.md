@@ -1,4 +1,11 @@
-# prismo Architecture
+---
+id: architecture
+title: Architecture
+slug: /architecture
+description: Workspace structure, data flow, store behavior, and UI layout.
+---
+
+# Architecture
 
 ## Overview
 
@@ -9,7 +16,8 @@
 - application runtime wiring
 - plugin SDKs and implementations
 
-The current architecture is intentionally simple but now uses a protocol-first plugin boundary.
+The current architecture is intentionally simple but now uses a protocol-first
+plugin boundary.
 
 ## Crates
 

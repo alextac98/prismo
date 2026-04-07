@@ -1,0 +1,70 @@
+load("@aspect_rules_js//js:defs.bzl", "js_run_binary")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//website:@docusaurus/core/package_json.bzl", docusaurus_bin = "bin")
+
+npm_link_all_packages(
+    name = "node_modules",
+)
+
+docusaurus_bin.docusaurus_binary(
+    name = "site_bin",
+    chdir = "website",
+    data = [
+        ":node_modules",
+        "package.json",
+        "pnpm-lock.yaml",
+        "docusaurus.config.ts",
+        "sidebars.ts",
+        "tsconfig.json",
+        ":site_src",
+        ":static_assets",
+        "//docs:site_docs",
+    ],
+)
+
+docusaurus_bin.docusaurus_binary(
+    name = "serve",
+    args = [
+        "serve",
+        "--build",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "3000",
+        "--no-open",
+    ],
+    chdir = "website",
+    data = [
+        ":node_modules",
+        "package.json",
+        "pnpm-lock.yaml",
+        "docusaurus.config.ts",
+        "sidebars.ts",
+        "tsconfig.json",
+        ":site_src",
+        ":static_assets",
+        "//docs:site_docs",
+    ],
+)
+
+js_run_binary(
+    name = "site",
+    tool = ":site_bin",
+    args = [
+        "build",
+        "--out-dir",
+        "site",
+    ],
+    env = {"NODE_ENV": "production"},
+    out_dirs = ["site"],
+)
+
+filegroup(
+    name = "site_src",
+    srcs = glob(["src/**"], exclude = ["**/node_modules/**"]),
+)
+
+filegroup(
+    name = "static_assets",
+    srcs = glob(["static/**"], exclude = ["**/node_modules/**"]),
+)

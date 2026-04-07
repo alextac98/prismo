@@ -1,0 +1,15 @@
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+
+DOC_SOURCES = glob(["**"], exclude = ["BUILD.bazel"])
+
+filegroup(
+    name = "content",
+    srcs = DOC_SOURCES,
+    visibility = ["//visibility:public"],
+)
+
+js_library(
+    name = "site_docs",
+    srcs = DOC_SOURCES,
+    visibility = ["//website:__pkg__"],
+)
