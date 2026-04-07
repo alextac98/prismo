@@ -794,7 +794,6 @@ dependencies = [
  "base64",
  "crossterm 0.29.0",
  "prismo-core",
- "prismo-example-rust",
  "prismo-plugin-host",
  "prismo-tui",
  "ratatui",

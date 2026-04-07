@@ -2,23 +2,19 @@
 
 ## Local Workflow
 
-Run the prototype:
+The current in-repo dev path is the Bazel example bundle:
 
 ```bash
-cargo run -q -- --plugins ./plugins/example-rust
+bazel run //apps/prismo:example_prismo
 ```
 
-Run with the C++ example plugin:
-
-```bash
-cargo run -q -- --plugins ./plugins/example-cpp
-```
+That target bundles the app with both in-repo example plugins.
 
 Build and test:
 
 ```bash
 cargo test
-bazel test //apps/prismo:cpp_smoke_test
+bazel build //apps/prismo:example_prismo
 ```
 
 Format the workspace:
@@ -70,13 +66,19 @@ For a new Rust plugin:
 The normal runtime path is now discovery-first:
 - bundle plugins under `./plugins` relative to the `prismo` executable
 - use `--plugins /path/to/plugins` when you want to point `prismo` at a different plugin directory
-- for local repo development, point `--plugins` at the specific example plugin directory you want to run
+- for local repo development, use the Bazel example bundle targets so the plugin binaries are laid out next to their manifests
+- keep `prismo-plugin.toml` checked into the plugin directory rather than generating it inside the build
 
 For the current C++ path:
 - the canonical protocol is still the protobuf stdio contract
 - C++ code talks to a small Diplomat-generated C++ API
 - the Diplomat layer calls into the Rust SDK core
 - Bazel generates the C and C++ bindings during the `cpp_sdk` build, so there is no separate manual regeneration step
+
+For downstream Bazel integration:
+- load `//bazel:defs.bzl`
+- use `prismo_plugin` to package a plugin executable plus a checked-in manifest
+- use `prismo_bundle` to assemble `prismo` plus packaged plugins; the bundle target itself is runnable with `bazel run`
 
 ## Add New Renderers
 

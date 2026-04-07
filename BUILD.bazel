@@ -21,5 +21,5 @@ format_multirun(
 
 alias(
     name = "prismo",
-    actual = "//apps/prismo:prismo",
+    actual = "//apps/prismo:example_prismo",
 )

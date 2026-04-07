@@ -1022,7 +1022,7 @@ impl Default for ExamplePluginConfig {
     }
 }
 
-pub fn run_stdio_plugin() -> Result<()> {
+fn main() -> Result<()> {
     let mut io = stdio()?;
     let config = io.config::<ExamplePluginConfig>().unwrap_or_default();
     let plugin = ExampleRustPlugin::new(Duration::from_millis(config.tick_ms));

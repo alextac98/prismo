@@ -2,9 +2,9 @@ use std::io;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use base64::Engine;
 use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::execute;
@@ -20,15 +20,6 @@ use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
-    if matches!(
-        args.as_slice(),
-        [_, plugin, example] if plugin == "plugin" && example == "example-rust"
-    ) {
-        return prismo_example_rust::run_stdio_plugin();
-    }
-    if matches!(args.as_slice(), [_, command, ..] if command == "smoke-test") {
-        return run_smoke_test_from_args(&args[2..]);
-    }
 
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -61,84 +52,8 @@ fn main() -> Result<()> {
     result
 }
 
-fn run_smoke_test_from_args(args: &[String]) -> Result<()> {
-    let plugin_id = required_arg_value(args, "--plugin-id")?;
-    let plugins_dir = plugins_dir_from_args(args)?;
-    let timeout = match optional_arg_value(args, "--timeout-ms")? {
-        Some(value) => Duration::from_millis(
-            value
-                .parse::<u64>()
-                .map_err(|_| anyhow!("invalid --timeout-ms value: {}", value))?,
-        ),
-        None => Duration::from_secs(5),
-    };
-
-    let (tx, rx) = mpsc::channel();
-    let host = PluginHost::start(tx, std::env::current_exe()?, plugins_dir)?;
-    let result = wait_for_plugin_sample(&rx, plugin_id, timeout);
-    host.shutdown();
-    result
-}
-
 fn plugins_dir_from_args(args: &[String]) -> Result<Option<PathBuf>> {
     optional_arg_value(args, "--plugins").map(|value| value.map(PathBuf::from))
-}
-
-fn wait_for_plugin_sample(
-    rx: &mpsc::Receiver<RuntimeEvent>,
-    plugin_id: &str,
-    timeout: Duration,
-) -> Result<()> {
-    let deadline = Instant::now() + timeout;
-    let mut saw_running = false;
-    let mut saw_descriptor = false;
-    let mut saw_sample = false;
-
-    while Instant::now() < deadline {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        match rx.recv_timeout(remaining.min(Duration::from_millis(100))) {
-            Ok(RuntimeEvent::PluginStatus(status)) if status.plugin_id == plugin_id => {
-                if status.state == prismo_core::PluginRuntimeState::Running {
-                    saw_running = true;
-                }
-                if status.state == prismo_core::PluginRuntimeState::Crashed {
-                    bail!(
-                        "plugin {} crashed during smoke test{}",
-                        plugin_id,
-                        status
-                            .message
-                            .as_ref()
-                            .map(|message| format!(": {}", message))
-                            .unwrap_or_default()
-                    );
-                }
-            }
-            Ok(RuntimeEvent::Telemetry(update)) if update.plugin_id == plugin_id => {
-                saw_descriptor |= !update.descriptors.is_empty();
-                saw_sample |= !update.samples.is_empty();
-                if saw_running && saw_descriptor && saw_sample {
-                    return Ok(());
-                }
-            }
-            Ok(_) => {}
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                bail!("runtime channel closed before smoke test completed");
-            }
-        }
-    }
-
-    bail!(
-        "timed out waiting for plugin {} (running={}, descriptors={}, samples={})",
-        plugin_id,
-        saw_running,
-        saw_descriptor,
-        saw_sample
-    )
-}
-
-fn required_arg_value<'a>(args: &'a [String], flag: &str) -> Result<&'a str> {
-    optional_arg_value(args, flag)?.ok_or_else(|| anyhow!("missing required {}", flag))
 }
 
 fn optional_arg_value<'a>(args: &'a [String], flag: &str) -> Result<Option<&'a str>> {

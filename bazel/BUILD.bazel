@@ -1,0 +1,10 @@
+exports_files([
+    "defs.bzl",
+    "prismo-run.sh.tera",
+])
+
+sh_binary(
+    name = "assemble_bundle",
+    srcs = ["assemble_bundle.sh"],
+    visibility = ["//visibility:private"],
+)

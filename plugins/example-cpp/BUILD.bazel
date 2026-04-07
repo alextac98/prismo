@@ -1,5 +1,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
+exports_files(["prismo-plugin.toml"])
+
 cc_binary(
     name = "example_cpp",
     srcs = ["src/main.cc"],

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -n "${RUNFILES_DIR:-}" ]]; then
+  RUNFILES_ROOT="${RUNFILES_DIR}"
+elif [[ -n "${TEST_SRCDIR:-}" ]]; then
+  RUNFILES_ROOT="${TEST_SRCDIR}"
+elif [[ -d "$0.runfiles" ]]; then
+  RUNFILES_ROOT="$0.runfiles"
+elif [[ -d "${BASH_SOURCE[0]}.runfiles" ]]; then
+  RUNFILES_ROOT="${BASH_SOURCE[0]}.runfiles"
+else
+  echo "runfiles directory not available" >&2
+  exit 1
+fi
+
+source "${RUNFILES_ROOT}/bazel_tools/tools/bash/runfiles/runfiles.bash"
+
+prismo_path="$(rlocation "{WORKSPACE}/{BUNDLE}/{PRISMO_NAME}")"
+if [[ ! -x "${prismo_path}" ]]; then
+  echo "prismo binary not found: ${prismo_path}" >&2
+  exit 1
+fi
+
+exec "${prismo_path}" "$@"

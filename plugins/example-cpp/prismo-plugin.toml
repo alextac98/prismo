@@ -6,4 +6,4 @@ protocol_version = 1
 language = "cpp"
 
 [entrypoint]
-argv = ["../../bazel-bin/plugins/example-cpp/example_cpp"]
+argv = ["./example_cpp"]

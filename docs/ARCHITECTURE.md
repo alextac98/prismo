@@ -89,6 +89,8 @@ This crate is the executable:
 - drives the TUI render loop
 - handles clipboard yank via OSC 52
 
+There is no longer any special in-process example-plugin path in the app itself. All examples go through the same external plugin boundary.
+
 ## Data Flow
 
 The current runtime looks like this:
@@ -99,7 +101,7 @@ plugin subprocess -> stdio + protobuf -> plugin-host -> RuntimeEvent -> app -> T
 
 Detailed flow:
 1. The app resolves the plugin directory from `--plugins` or from a sibling `plugins/` directory.
-2. The host discovers plugin manifests in that directory.
+2. The host discovers `prismo-plugin.toml` manifests in that directory.
 3. The host spawns each discovered plugin subprocess.
 4. The host sends `Init` on `stdin` and validates the child's `Hello`.
 5. The host normalizes plugin messages into `RuntimeEvent` values.
@@ -155,7 +157,13 @@ Bazel is the primary build system:
 - `rules_rust` provides the hermetic Rust toolchain
 - `toolchains_llvm` provides the hermetic C++ toolchain used for the in-repo C++ plugin
 - `crate_universe` reads the Cargo workspace metadata and resolves external Rust crates for Bazel
+- `bazel/defs.bzl` exposes Prismo-specific packaging rules for downstream Bazel users
 - each workspace package has its own `BUILD.bazel`
+- plugin manifests are checked into plugin directories and packaged unchanged by Bazel
+
+The current downstream Bazel surface is intentionally small:
+- `prismo_plugin` packages an executable plus its checked-in manifest
+- `prismo_bundle` assembles the runnable bundle layout and is itself executable via `bazel run`
 
 The current C++ path is intentionally Rust-backed:
 - `crates/plugin-sdk-ffi` builds a Rust static library

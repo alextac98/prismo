@@ -48,28 +48,31 @@ Requirements:
 - a terminal with alternate-screen support
 - OSC 52 clipboard support if you want yank/copy to reach your terminal clipboard
 
-Run:
+Current in-repo development path:
 
 ```bash
-cargo run -q -- --plugins ./plugins/example-rust
+bazel run //apps/prismo:example_prismo
 ```
 
-`prismo` now auto-discovers plugins from:
+That target builds a runnable bundle containing:
+- the `prismo` app
+- the Rust example plugin
+- the C++ example plugin
+
+At runtime, `prismo` discovers plugins from:
 - `./plugins` relative to the `prismo` executable
 - or an explicit `--plugins /path/to/plugins` override
-
-Run the C++ example plugin:
-
-```bash
-cargo run -q -- --plugins ./plugins/example-cpp
-```
 
 Build and test:
 
 ```bash
 cargo test
-bazel test //apps/prismo:cpp_smoke_test
+bazel build //apps/prismo:example_prismo
 ```
+
+Bazel consumers can load [defs.bzl](/Users/alex/code/alextac98/prismo/bazel/defs.bzl) and use:
+- `prismo_plugin`: package an executable plus a checked-in `prismo-plugin.toml`
+- `prismo_bundle`: assemble `prismo` plus plugins into the runtime bundle layout; the bundle target itself is runnable with `bazel run`
 
 Format:
 
@@ -120,6 +123,7 @@ The current plugin boundary is protocol-first:
 - `stdin` / `stdout` carry length-prefixed protobuf frames
 - the host normalizes those frames into internal telemetry updates
 - the TUI renders store snapshots
+- plugin manifests are checked into plugin directories and packaged unchanged
 - plugins are discovered from a sibling `plugins/` directory or an explicit `--plugins` override
 
 Reference implementations live in `plugins/example-rust` and `plugins/example-cpp`. They emit channel descriptors on startup and then periodically emit samples and plugin health over the shared protocol.

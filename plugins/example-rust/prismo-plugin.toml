@@ -6,4 +6,4 @@ protocol_version = 1
 language = "rust"
 
 [entrypoint]
-argv = ["__PRISMO_SELF__", "plugin", "example-rust"]
+argv = ["./example_rust"]
