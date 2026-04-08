@@ -7,8 +7,6 @@ PrismoPluginInfo = provider(
         "plugin_dir_name": "Directory name to use inside the bundle.",
     },
 )
-
-
 def _prismo_plugin_impl(ctx):
     executable = ctx.executable.executable
     executable_name = executable.basename

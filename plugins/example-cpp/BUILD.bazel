@@ -7,7 +7,7 @@ cc_binary(
     srcs = ["src/main.cc"],
     copts = ["-std=c++17"],
     deps = [
-        "//crates/plugin-sdk-ffi:cpp_sdk",
+        "//crates/plugin-sdk/cpp:cpp_sdk",
     ],
     visibility = ["//visibility:public"],
 )

@@ -13,4 +13,4 @@ anyhow.workspace = true
 rand.workspace = true
 serde.workspace = true
 prismo-plugin-protocol = { path = "../../crates/plugin-protocol" }
-prismo-plugin-sdk-rust = { path = "../../crates/plugin-sdk-rust" }
+prismo-plugin-sdk-rust = { path = "../../crates/plugin-sdk/rust" }

@@ -10,6 +10,6 @@ base64.workspace = true
 crossterm.workspace = true
 ratatui.workspace = true
 tracing-subscriber.workspace = true
-prismo-core = { path = "../../crates/core" }
-prismo-plugin-host = { path = "../../crates/plugin-host" }
-prismo-tui = { path = "../../crates/tui" }
+prismo-core = { path = "../crates/core" }
+prismo-plugin-host = { path = "../crates/plugin-host" }
+prismo-tui = { path = "../crates/tui" }

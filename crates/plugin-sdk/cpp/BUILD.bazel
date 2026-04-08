@@ -1,0 +1,32 @@
+load("@crates//:defs.bzl", "all_crate_deps")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_rust//rust:defs.bzl", "rust_static_library")
+load("//tools/ffi:defs.bzl", "prismo_diplomat_bindings")
+
+rust_static_library(
+    name = "plugin_sdk_cpp_static",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "prismo_plugin_sdk_cpp",
+    edition = "2024",
+    deps = all_crate_deps(normal = True) + [
+        "//crates/plugin-protocol:plugin_protocol",
+        "//crates/plugin-sdk/rust:plugin_sdk_rust",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    visibility = ["//visibility:public"],
+)
+
+prismo_diplomat_bindings(
+    name = "generated_bindings",
+    entry = "src/lib.rs",
+    stem = "PluginSession",
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "cpp_sdk",
+    hdrs = [":generated_bindings"],
+    includes = ["."],
+    deps = [":plugin_sdk_cpp_static"],
+    visibility = ["//visibility:public"],
+)

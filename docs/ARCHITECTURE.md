@@ -44,13 +44,13 @@ This crate owns:
 - restart policy handling
 - conversion from wire messages into `RuntimeEvent`
 
-## `crates/plugin-sdk-rust`
+## `crates/plugin-sdk/rust`
 
 This crate is the first plugin authoring SDK for the subprocess protocol.
 
-## `crates/plugin-sdk-ffi`
+## `crates/plugin-sdk/cpp`
 
-This crate exposes a small Diplomat-backed FFI surface on top of the Rust SDK core.
+This crate exposes a small Diplomat-backed C++ surface on top of the Rust SDK core.
 It exists so C++ plugins can reuse the same stdio framing and protobuf implementation
 without reimplementing the protocol natively yet.
 
@@ -78,7 +78,7 @@ This crate owns:
 
 It renders from `StoreSnapshot` only. It does not talk directly to plugins.
 
-## `apps/prismo`
+## `app`
 
 This crate is the executable:
 - accepts an optional `--plugins` override directory
@@ -166,7 +166,7 @@ The current downstream Bazel surface is intentionally small:
 - `prismo_bundle` assembles the runnable bundle layout and is itself executable via `bazel run`
 
 The current C++ path is intentionally Rust-backed:
-- `crates/plugin-sdk-ffi` builds a Rust static library
+- `crates/plugin-sdk/cpp` builds a Rust static library
 - Bazel runs a Rust Diplomat codegen tool and exports the generated C and C++ headers
 - `plugins/example-cpp` links that Rust library into a Bazel-built C++ binary
 

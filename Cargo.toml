@@ -3,10 +3,10 @@ members = [
     "crates/core",
     "crates/plugin-host",
     "crates/plugin-protocol",
-    "crates/plugin-sdk-ffi",
-    "crates/plugin-sdk-rust",
+    "crates/plugin-sdk/cpp",
+    "crates/plugin-sdk/rust",
     "crates/tui",
-    "apps/prismo",
+    "app",
     "plugins/example-rust",
     "tools/ffi",
 ]

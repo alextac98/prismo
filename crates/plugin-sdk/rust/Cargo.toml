@@ -8,4 +8,4 @@ license.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-prismo-plugin-protocol = { path = "../plugin-protocol" }
+prismo-plugin-protocol = { path = "../../plugin-protocol" }

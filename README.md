@@ -31,12 +31,12 @@ The current examples are the Rust and C++ plugins, and both run through the same
 
 ## Workspace Layout
 
-- `apps/prismo`: the `prismo` binary and runtime loop
+- `app`: the `prismo` binary and runtime loop
 - `crates/core`: internal telemetry data model, store, and runtime snapshots
 - `crates/plugin-protocol`: protobuf messages, framing, manifests, and plugin discovery
 - `crates/plugin-host`: subprocess supervision and wire-message normalization
-- `crates/plugin-sdk-ffi`: Diplomat-backed FFI surface for C++ plugin authors
-- `crates/plugin-sdk-rust`: Rust plugin authoring helper
+- `crates/plugin-sdk/cpp`: Diplomat-backed C++ SDK surface
+- `crates/plugin-sdk/rust`: Rust plugin authoring helper
 - `plugins/example-cpp`: C++ example plugin built through Bazel and the FFI SDK
 - `crates/tui`: layout, rendering, input handling, and help UI
 - `plugins/example-rust`: Rust example plugin implementation
@@ -51,7 +51,7 @@ Requirements:
 Current in-repo development path:
 
 ```bash
-bazel run //apps/prismo:example_prismo
+bazel run //app:example_prismo
 ```
 
 That target builds a runnable bundle containing:
@@ -67,7 +67,7 @@ Build and test:
 
 ```bash
 cargo test
-bazel build //apps/prismo:example_prismo
+bazel build //app:example_prismo
 ```
 
 Bazel consumers can load [defs.bzl](/Users/alex/code/alextac98/prismo/bazel/defs.bzl) and use:

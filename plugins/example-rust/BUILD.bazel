@@ -9,7 +9,7 @@ rust_binary(
     edition = "2024",
     deps = all_crate_deps(normal = True) + [
         "//crates/plugin-protocol:plugin_protocol",
-        "//crates/plugin-sdk-rust:plugin_sdk_rust",
+        "//crates/plugin-sdk/rust:plugin_sdk_rust",
     ],
     visibility = ["//visibility:public"],
 )

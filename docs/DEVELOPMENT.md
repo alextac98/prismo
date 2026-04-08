@@ -5,7 +5,7 @@
 The current in-repo dev path is the Bazel example bundle:
 
 ```bash
-bazel run //apps/prismo:example_prismo
+bazel run //app:example_prismo
 ```
 
 That target bundles the app with both in-repo example plugins.
@@ -14,7 +14,7 @@ Build and test:
 
 ```bash
 cargo test
-bazel build //apps/prismo:example_prismo
+bazel build //app:example_prismo
 ```
 
 Format the workspace:
@@ -52,8 +52,8 @@ That means:
 Start by deciding which boundary you need:
 - `crates/plugin-protocol` for the wire contract
 - `crates/plugin-host` for process supervision and normalization
-- `crates/plugin-sdk-rust` for a Rust authoring helper
-- `crates/plugin-sdk-ffi` for the current C++ authoring bridge
+- `crates/plugin-sdk/rust` for a Rust authoring helper
+- `crates/plugin-sdk/cpp` for the current C++ authoring bridge
 - `plugins/example-rust` for a reference subprocess plugin
 - `plugins/example-cpp` for a reference C++ subprocess plugin
 
@@ -126,5 +126,5 @@ That means new language support can be added by:
 - reusing the same manifest and bundle layout model
 
 The repo now demonstrates this in two ways:
-- Rust plugins through `crates/plugin-sdk-rust`
-- C++ plugins through `crates/plugin-sdk-ffi` and the generated Diplomat bindings
+- Rust plugins through `crates/plugin-sdk/rust`
+- C++ plugins through `crates/plugin-sdk/cpp` and the generated Diplomat bindings
