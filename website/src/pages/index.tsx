@@ -8,14 +8,38 @@ import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
 
-function FeatureCard(props: {title: string; body: string}) {
-  return (
-    <article className={styles.featureCard}>
-      <h3>{props.title}</h3>
-      <p>{props.body}</p>
-    </article>
-  );
-}
+const features = [
+  {
+    icon: '>_',
+    title: 'Terminal-native',
+    body: 'Stay in the shell. Fast keyboard navigation, copy support, live filters, and a compact status bar.',
+  },
+  {
+    icon: '{}',
+    title: 'Plugin protocol',
+    body: 'Rust and C++ plugins share the same protobuf-over-stdio boundary. Bring your own language.',
+  },
+  {
+    icon: '//',
+    title: 'Bazel-first',
+    body: 'Hermetic toolchains and workspace-level dependency control. Cargo metadata available for IDE support.',
+  },
+];
+
+const steps = [
+  {label: 'Run with Cargo', command: 'cargo run -q -- --plugins ./plugins/example-rust'},
+  {label: 'Build with Bazel', command: 'bazel build //apps/prismo'},
+  {label: 'Test', command: 'bazel test //apps/prismo:cpp_smoke_test'},
+];
+
+const flowSteps = [
+  'plugin subprocess',
+  'protobuf frames',
+  'plugin-host',
+  'app',
+  'store snapshot',
+  'TUI',
+];
 
 export default function Home(): ReactNode {
   const {siteConfig} = useDocusaurusContext();
@@ -26,91 +50,119 @@ export default function Home(): ReactNode {
       title={siteConfig.title}
       description="Prismo is a protocol-first terminal telemetry viewer for embedded and target-side debugging.">
       <main className={styles.page}>
+        {/* ── Hero ── */}
         <section className={styles.hero}>
-          <div className={styles.heroText}>
-            <div className={styles.kicker}>Protocol-first telemetry tooling</div>
-            <Heading as="h1" className={styles.title}>
-              Inspect live telemetry without leaving the terminal.
+          <span className={styles.badge}>Open-source telemetry tooling</span>
+          <Heading as="h1" className={styles.title}>
+            Live telemetry,{'\n'}
+            <span className={styles.titleAccent}>right in the terminal.</span>
+          </Heading>
+          <p className={styles.subtitle}>
+            {siteConfig.tagline} Explore streams, chart numeric history, and
+            extend with multi-language plugins.
+          </p>
+          <div className={styles.actions}>
+            <Link
+              className={clsx('button button--primary button--lg', styles.primaryBtn)}
+              to="/docs">
+              Get started
+            </Link>
+            <Link
+              className={clsx('button button--outline button--lg', styles.secondaryBtn)}
+              to="/docs/getting-started">
+              View quickstart
+            </Link>
+          </div>
+        </section>
+
+        {/* ── Screenshot ── */}
+        <section className={styles.screenshotSection}>
+          <div className={styles.screenshotFrame}>
+            <div className={styles.screenshotDots}>
+              <span /><span /><span />
+            </div>
+            <img
+              alt="Prismo terminal telemetry viewer"
+              className={styles.screenshot}
+              src={screenshotUrl}
+            />
+          </div>
+        </section>
+
+        {/* ── Features ── */}
+        <section className={styles.features}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.label}>Features</span>
+            <Heading as="h2" className={styles.sectionTitle}>
+              Built for the way you work
             </Heading>
-            <p className={styles.subtitle}>{siteConfig.tagline}</p>
-            <p className={styles.copy}>
-              Prismo combines a Rust TUI, a subprocess plugin model, and a
-              Bazel-first workspace so you can explore streams, chart numeric
-              history, and grow toward multi-language plugins.
-            </p>
-            <div className={styles.actions}>
-              <Link className={clsx('button button--primary button--lg', styles.primaryAction)} to="/docs">
-                Read the docs
-              </Link>
-              <Link className={clsx('button button--secondary button--lg', styles.secondaryAction)} to="/docs/getting-started">
-                Run the prototype
-              </Link>
-            </div>
           </div>
-          <div className={styles.heroVisual}>
-            <div className={styles.screenshotFrame}>
-              <img
-                alt="Prismo terminal telemetry viewer screenshot"
-                className={styles.screenshot}
-                src={screenshotUrl}
-              />
-            </div>
+          <div className={styles.featureGrid}>
+            {features.map((f) => (
+              <article key={f.title} className={styles.featureCard}>
+                <div className={styles.featureIcon}>{f.icon}</div>
+                <h3 className={styles.featureTitle}>{f.title}</h3>
+                <p className={styles.featureBody}>{f.body}</p>
+              </article>
+            ))}
           </div>
         </section>
 
-        <section className={styles.featureGrid}>
-          <FeatureCard
-            title="Terminal-native workflow"
-            body="Keep focus in the shell with fast keyboard navigation, copy support, filters, and a compact status bar."
-          />
-          <FeatureCard
-            title="Shared plugin protocol"
-            body="Rust and C++ examples already run through the same protobuf-over-stdio boundary, with room for more SDKs."
-          />
-          <FeatureCard
-            title="Bazel-first repository"
-            body="Hermetic toolchains and workspace-level dependency control stay central, while Cargo metadata remains available for Rust development."
-          />
-        </section>
-
+        {/* ── Quickstart ── */}
         <section className={styles.quickstart}>
-          <div>
-            <div className={styles.sectionLabel}>Quickstart</div>
+          <div className={styles.sectionHeader}>
+            <span className={styles.label}>Quickstart</span>
             <Heading as="h2" className={styles.sectionTitle}>
-              Current local run path
+              Up and running in seconds
             </Heading>
-            <p className={styles.sectionCopy}>
-              The prototype is easiest to launch through Cargo today, while
-              Bazel remains the main build and test surface.
-            </p>
           </div>
-          <pre className={styles.commandBlock}>
-            <code>{`cargo run -q -- --plugins ./plugins/example-rust
-bazel build //apps/prismo
-bazel test //apps/prismo:cpp_smoke_test`}</code>
-          </pre>
+          <div className={styles.terminal}>
+            <div className={styles.terminalBar}>
+              <span className={styles.terminalDots}>
+                <span /><span /><span />
+              </span>
+              <span className={styles.terminalTitle}>terminal</span>
+            </div>
+            <div className={styles.terminalBody}>
+              {steps.map((s) => (
+                <div key={s.label} className={styles.terminalLine}>
+                  <span className={styles.terminalComment}># {s.label}</span>
+                  <code>
+                    <span className={styles.terminalPrompt}>$ </span>
+                    {s.command}
+                  </code>
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
 
+        {/* ── Architecture ── */}
         <section className={styles.architecture}>
-          <div>
-            <div className={styles.sectionLabel}>Architecture</div>
+          <div className={styles.sectionHeader}>
+            <span className={styles.label}>Architecture</span>
             <Heading as="h2" className={styles.sectionTitle}>
-              A small but deliberate runtime split
+              A deliberate runtime split
             </Heading>
             <p className={styles.sectionCopy}>
-              The current workspace separates telemetry ingestion, protocol
-              contracts, subprocess hosting, TUI rendering, and SDK surfaces so
-              the plugin boundary stays explicit as the prototype grows.
+              Telemetry ingestion, protocol contracts, subprocess hosting, TUI
+              rendering, and SDK surfaces are cleanly separated so the plugin
+              boundary stays explicit.
             </p>
           </div>
-          <div className={styles.flowCard}>
-            <div className={styles.flowLabel}>Data flow</div>
-            <code className={styles.flowCode}>
-              plugin subprocess -&gt; protobuf frames -&gt; plugin-host -&gt; app -&gt;
-              store snapshot -&gt; TUI
-            </code>
+          <div className={styles.pipeline}>
+            {flowSteps.map((step, i) => (
+              <div key={step} className={styles.pipelineStep}>
+                <div className={styles.pipelineNode}>{step}</div>
+                {i < flowSteps.length - 1 && (
+                  <div className={styles.pipelineArrow} aria-hidden="true" />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className={styles.archCta}>
             <Link className={styles.inlineLink} to="/docs/architecture">
-              Read the architecture guide
+              Read the architecture guide &rarr;
             </Link>
           </div>
         </section>
