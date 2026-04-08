@@ -1,102 +1,73 @@
-import {themes as prismThemes} from 'prism-react-renderer';
-import type {Config} from '@docusaurus/types';
-import type * as Preset from '@docusaurus/preset-classic';
+import { themes as prismThemes } from "prism-react-renderer";
+import type { Config } from "@docusaurus/types";
+import type * as Preset from "@docusaurus/preset-classic";
 
-const siteUrl = process.env.DOCS_SITE_URL ?? 'https://prismo.alextac.com';
-const baseUrl = process.env.DOCS_BASE_URL ?? '/';
-const repoUrl = process.env.DOCS_REPO_URL ?? 'https://github.com/alextac98/prismo';
+const siteUrl = process.env.DOCS_SITE_URL ?? "https://prismo.alextac.com";
+const baseUrl = process.env.DOCS_BASE_URL ?? "/";
+const repoUrl =
+  process.env.DOCS_REPO_URL ?? "https://github.com/alextac98/prismo";
 
 const config: Config = {
-  title: 'Prismo',
-  tagline: 'A protocol-first terminal telemetry viewer.',
+  title: "Prismo",
+  tagline: "An adaptable terminal telemetry viewer.",
   future: {
     v4: true,
   },
   url: siteUrl,
   baseUrl,
-  onBrokenLinks: 'throw',
+  onBrokenLinks: "throw",
   markdown: {
     hooks: {
-      onBrokenMarkdownLinks: 'throw',
+      onBrokenMarkdownLinks: "throw",
     },
   },
   i18n: {
-    defaultLocale: 'en',
-    locales: ['en'],
+    defaultLocale: "en",
+    locales: ["en"],
   },
   presets: [
     [
-      'classic',
+      "classic",
       {
         docs: {
-          path: '../docs',
-          routeBasePath: 'docs',
-          sidebarPath: './sidebars.ts',
+          path: "../docs",
+          routeBasePath: "docs",
+          sidebarPath: "./sidebars.ts",
         },
         blog: false,
         theme: {
-          customCss: './src/css/custom.css',
+          customCss: "./src/css/custom.css",
         },
       } satisfies Preset.Options,
     ],
   ],
   themeConfig: {
     colorMode: {
-      defaultMode: 'light',
+      defaultMode: "light",
       disableSwitch: false,
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'Prismo',
+      title: "Prismo",
       items: [
         {
-          type: 'docSidebar',
-          sidebarId: 'tutorialSidebar',
-          position: 'left',
-          label: 'Docs',
+          type: "docSidebar",
+          sidebarId: "tutorialSidebar",
+          position: "left",
+          label: "Docs",
         },
         {
           href: repoUrl,
-          label: 'GitHub',
-          position: 'right',
+          position: "right",
+          className: "header-github-link",
+          "aria-label": "GitHub repository",
         },
       ],
     },
     footer: {
-      style: 'dark',
-      links: [
-        {
-          title: 'Docs',
-          items: [
-            {
-              label: 'Introduction',
-              to: '/docs',
-            },
-            {
-              label: 'Getting Started',
-              to: '/docs/getting-started',
-            },
-            {
-              label: 'Architecture',
-              to: '/docs/architecture',
-            },
-          ],
-        },
-        {
-          title: 'Project',
-          items: [
-            {
-              label: 'Repository',
-              href: repoUrl,
-            },
-            {
-              label: 'Development',
-              to: '/docs/development',
-            },
-          ],
-        },
-      ],
-      copyright: `Prismo © ${new Date().getFullYear()}`,
+      style: "dark",
+      links: [],
+      copyright: `<div class="footer-row"><span>© ${new Date().getFullYear()} Alex Tacescu</span><a href="${repoUrl}" target="_blank" rel="noopener noreferrer">GitHub</a></div>`,
     },
     prism: {
       theme: prismThemes.github,
