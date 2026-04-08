@@ -33,8 +33,8 @@ The current examples are the Rust and C++ plugins, and both run through the same
 
 - `app`: the `prismo` binary and runtime loop
 - `crates/core`: internal telemetry data model, store, and runtime snapshots
-- `crates/plugin-protocol`: protobuf messages, framing, manifests, and plugin discovery
-- `crates/plugin-host`: subprocess supervision and wire-message normalization
+- `crates/plugin-protocol`: protobuf messages and framing
+- `crates/plugin-host`: plugin manifest discovery, subprocess supervision, and wire-message normalization
 - `crates/plugin-sdk/cpp`: Diplomat-backed C++ SDK surface
 - `crates/plugin-sdk/rust`: Rust plugin authoring helper
 - `plugins/example-cpp`: C++ example plugin built through Bazel and the FFI SDK

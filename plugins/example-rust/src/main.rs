@@ -2,9 +2,9 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
-use prismo_plugin_protocol::{ChannelDescriptor, Health, Sample};
 use prismo_plugin_sdk_rust::{
-    stdio, value_bool, value_bytes, value_float, value_integer, value_text,
+    ChannelDescriptor, Sample, channel_descriptor, health, sample, stdio, value_bool, value_bytes,
+    value_float, value_integer, value_text,
 };
 use rand::Rng;
 use serde::Deserialize;
@@ -44,17 +44,17 @@ struct SyntheticChannelSpec {
 
 impl SyntheticChannelSpec {
     fn descriptor(self) -> ChannelDescriptor {
-        ChannelDescriptor {
-            channel_path: self.path.to_string(),
-            display_name: self
+        channel_descriptor(
+            self.path,
+            self
                 .path
                 .rsplit('.')
                 .next()
                 .unwrap_or(self.path)
                 .to_string(),
-            unit: self.unit.map(str::to_string),
-            description: self.description.to_string(),
-        }
+            self.unit,
+            self.description,
+        )
     }
 
     fn should_emit(self, tick: u64) -> bool {
@@ -99,12 +99,7 @@ impl SyntheticChannelSpec {
             ),
         };
 
-        Sample {
-            channel_path: self.path.to_string(),
-            value: Some(value),
-            timestamp_unix_ns,
-            sequence,
-        }
+        sample(self.path, timestamp_unix_ns, sequence, value)
     }
 }
 
@@ -1070,16 +1065,16 @@ fn main() -> Result<()> {
         io.send_samples(plugin.id(), samples)?;
         io.send_health(
             plugin.id(),
-            Health {
-                plugin_id: plugin.id().to_string(),
+            health(
+                plugin.id(),
                 emitted_updates,
                 dropped_updates,
-                last_error: if current_outages.is_empty() {
+                if current_outages.is_empty() {
                     None
                 } else {
                     Some(format!("dropouts: {}", current_outages.join(", ")))
                 },
-            },
+            ),
         )?;
     }
 }

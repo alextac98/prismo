@@ -812,7 +812,6 @@ name = "prismo-example-rust"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "prismo-plugin-protocol",
  "prismo-plugin-sdk-rust",
  "rand",
  "serde",
@@ -832,7 +831,9 @@ dependencies = [
  "anyhow",
  "prismo-core",
  "prismo-plugin-protocol",
+ "serde",
  "serde_json",
+ "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]

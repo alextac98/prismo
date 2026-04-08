@@ -32,12 +32,11 @@ It owns the internal telemetry contract used after plugin messages are normalize
 This crate owns the external plugin contract:
 - protobuf message types
 - length-prefixed frame helpers
-- plugin manifest parsing
-- plugin discovery
 
 ## `crates/plugin-host`
 
 This crate owns:
+- plugin manifest parsing and discovery
 - subprocess spawn and supervision
 - `stdin` / `stdout` / `stderr` transport
 - handshake validation

@@ -1,6 +1,6 @@
 load("@crates//:defs.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//bazel:defs.bzl", "prismo_bundle", "prismo_plugin")
+load("//bazel:defs.bzl", "prismo_bundle")
 
 rust_binary(
     name = "prismo",
@@ -14,24 +14,12 @@ rust_binary(
     visibility = ["//visibility:public"],
 )
 
-prismo_plugin(
-    name = "example_cpp_plugin",
-    executable = "//plugins/example-cpp:example_cpp",
-    manifest = "//plugins/example-cpp:prismo-plugin.toml",
-)
-
-prismo_plugin(
-    name = "example_rust_plugin",
-    executable = "//plugins/example-rust:example_rust",
-    manifest = "//plugins/example-rust:prismo-plugin.toml",
-)
-
 prismo_bundle(
     name = "example_prismo",
     prismo = ":prismo",
     plugins = [
-        ":example_cpp_plugin",
-        ":example_rust_plugin"
+        "//plugins/example-cpp:example_cpp_plugin",
+        "//plugins/example-rust:example_rust_plugin",
     ],
     visibility = ["//visibility:public"],
 )

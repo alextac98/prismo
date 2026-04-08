@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("//bazel:defs.bzl", "prismo_plugin")
 
 exports_files(["prismo-plugin.toml"])
 
@@ -9,5 +10,12 @@ cc_binary(
     deps = [
         "//crates/plugin-sdk/cpp:cpp_sdk",
     ],
+    visibility = ["//visibility:public"],
+)
+
+prismo_plugin(
+    name = "example_cpp_plugin",
+    executable = ":example_cpp",
+    manifest = ":prismo-plugin.toml",
     visibility = ["//visibility:public"],
 )

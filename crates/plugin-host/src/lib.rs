@@ -1,3 +1,5 @@
+mod config;
+
 use std::io::{BufRead, BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -10,9 +12,9 @@ use prismo_core::{
     ChannelDescriptor as CoreChannelDescriptor, ChannelSample, ChannelValue, PluginHealth,
     PluginRuntimeState, PluginStatusUpdate, RuntimeEvent, TelemetryUpdate,
 };
+use crate::config::{DiscoveredPlugin, PluginManifest, default_plugin_dir, discover_plugins};
 use prismo_plugin_protocol::{
-    DiscoveredPlugin, Envelope, Health, Init, Message, PluginManifest, ValueKind,
-    default_plugin_dir, discover_plugins, read_delimited, write_delimited,
+    Envelope, Health, Init, Message, ValueKind, read_delimited, write_delimited,
 };
 
 const PROTOCOL_VERSION: u32 = 1;

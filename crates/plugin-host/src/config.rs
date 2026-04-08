@@ -2,9 +2,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
+use serde::Deserialize;
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 pub struct PluginManifest {
     pub schema_version: u32,
@@ -25,13 +25,6 @@ pub struct EntrypointConfig {
 pub struct DiscoveredPlugin {
     pub manifest_path: PathBuf,
     pub manifest: PluginManifest,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct InitPayload {
-    pub instance_id: String,
-    pub plugin_id: String,
-    pub config: JsonValue,
 }
 
 pub fn load_plugin_manifest(path: &Path) -> Result<PluginManifest> {
@@ -114,7 +107,7 @@ fn validate_unique_plugin_ids(discovered: &[DiscoveredPlugin]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{default_plugin_dir, discover_plugins};
@@ -185,6 +178,4 @@ argv = ["./single"]
         path.push(format!("{}-{}-{}", prefix, std::process::id(), nanos));
         path
     }
-
-    use std::path::Path;
 }

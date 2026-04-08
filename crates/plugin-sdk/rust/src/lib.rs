@@ -3,9 +3,10 @@ use std::io::{self, BufReader, BufWriter, Read, Write};
 use anyhow::{Context, Result, bail};
 use serde::de::DeserializeOwned;
 
+pub use prismo_plugin_protocol::{ChannelDescriptor, Health, Init, Sample, Value, ValueKind};
 use prismo_plugin_protocol::{
-    ChannelDescriptor, DeclareChannels, Envelope, Health, Hello, Init, Log, Message, Sample,
-    SampleBatch, Value, read_delimited, write_delimited,
+    DeclareChannels, Envelope, Hello, Log, Message, SampleBatch, read_delimited,
+    write_delimited,
 };
 
 const PROTOCOL_VERSION: u32 = 1;
@@ -138,6 +139,48 @@ pub fn value_text(value: impl Into<String>) -> Value {
 pub fn value_bytes(value: Vec<u8>) -> Value {
     Value {
         kind: Some(prismo_plugin_protocol::ValueKind::BytesValue(value)),
+    }
+}
+
+pub fn channel_descriptor<U: Into<String>>(
+    channel_path: impl Into<String>,
+    display_name: impl Into<String>,
+    unit: Option<U>,
+    description: impl Into<String>,
+) -> ChannelDescriptor {
+    ChannelDescriptor {
+        channel_path: channel_path.into(),
+        display_name: display_name.into(),
+        unit: unit.map(Into::into),
+        description: description.into(),
+    }
+}
+
+pub fn sample(
+    channel_path: impl Into<String>,
+    timestamp_unix_ns: u64,
+    sequence: u64,
+    value: Value,
+) -> Sample {
+    Sample {
+        channel_path: channel_path.into(),
+        timestamp_unix_ns,
+        sequence,
+        value: Some(value),
+    }
+}
+
+pub fn health<E: Into<String>>(
+    plugin_id: impl Into<String>,
+    emitted_updates: u64,
+    dropped_updates: u64,
+    last_error: Option<E>,
+) -> Health {
+    Health {
+        plugin_id: plugin_id.into(),
+        emitted_updates,
+        dropped_updates,
+        last_error: last_error.map(Into::into),
     }
 }
 

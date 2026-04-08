@@ -51,7 +51,7 @@ That means:
 
 Start by deciding which boundary you need:
 - `crates/plugin-protocol` for the wire contract
-- `crates/plugin-host` for process supervision and normalization
+- `crates/plugin-host` for manifest discovery, process supervision, and normalization
 - `crates/plugin-sdk/rust` for a Rust authoring helper
 - `crates/plugin-sdk/cpp` for the current C++ authoring bridge
 - `plugins/example-rust` for a reference subprocess plugin
