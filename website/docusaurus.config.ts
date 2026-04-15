@@ -2,7 +2,11 @@ import { themes as prismThemes } from "prism-react-renderer";
 import type { Config } from "@docusaurus/types";
 import type * as Preset from "@docusaurus/preset-classic";
 
-const siteUrl = process.env.DOCS_SITE_URL ?? "https://prismo.alextac.com";
+const vercelUrl = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
+  : undefined;
+const siteUrl =
+  process.env.DOCS_SITE_URL ?? vercelUrl ?? "https://prismo.alextac.com";
 const baseUrl = process.env.DOCS_BASE_URL ?? "/";
 const repoUrl =
   process.env.DOCS_REPO_URL ?? "https://github.com/alextac98/prismo";
