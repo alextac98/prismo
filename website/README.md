@@ -43,3 +43,31 @@ The site defaults to GitHub Pages-style values:
 - `DOCS_BASE_URL=/`
 
 Override those environment variables in CI if the published URL changes.
+
+## Vercel
+
+This repository includes a root-level `vercel.json` so Vercel can build the
+website through Bazel instead of running Docusaurus directly.
+
+Use these project settings:
+
+- Root Directory: repository root
+- Framework Preset: Other
+- Build Command: use `vercel.json`
+- Output Directory: use `vercel.json`
+
+The build command uses Bazelisk via `npx` and forwards these environment
+variables into the Bazel action so Docusaurus can compute the published site
+URL correctly:
+
+- `VERCEL_URL`
+- `DOCS_SITE_URL`
+- `DOCS_BASE_URL`
+- `DOCS_REPO_URL`
+
+If you want the production site to publish at a custom domain, set
+`DOCS_SITE_URL` in Vercel to the full origin, for example:
+
+```bash
+https://prismo.alextac.com
+```

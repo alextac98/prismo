@@ -36,5 +36,5 @@ architecture.
 ## Read This Next
 
 - [Getting Started](./getting-started.md) to start using Prismo quickly locally
-- [Architecture](./architecture.md) to understand the runtime and plugin model
-- [Development](./development.md) to extend the project or work on the codebase
+- [Architecture](./ARCHITECTURE.md) to understand the runtime and plugin model
+- [Development](./DEVELOPMENT.md) to extend the project or work on the codebase
