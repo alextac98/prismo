@@ -9,9 +9,8 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@docusaurus/core": "^3.5.2",
-    "@docusaurus/faster": "^3.10.0",
-    "@docusaurus/preset-classic": "^3.5.2",
+    "@docusaurus/core": "^3.10.0",
+    "@docusaurus/preset-classic": "^3.10.0",
     "@mdx-js/react": "^3.1.1",
     "clsx": "^2.1.1",
     "prism-react-renderer": "^2.4.1",
@@ -24,10 +23,16 @@
     "@docusaurus/types": "^3.10.0",
     "typescript": "~5.6.3"
   },
+  "overrides": {
+    "webpackbar": "7.0.0"
+  },
   "engines": {
     "node": ">=20.0"
   },
   "pnpm": {
+    "overrides": {
+      "webpackbar": "7.0.0"
+    },
     "onlyBuiltDependencies": []
   }
 }

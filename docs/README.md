@@ -11,8 +11,8 @@ These files are developer-facing repository docs. They are meant to track the co
 
 ## Documents
 
-- [ARCHITECTURE.md](/Users/alex/code/alextac98/prismo/docs/ARCHITECTURE.md): workspace structure, runtime flow, store behavior, and UI structure
-- [DEVELOPMENT.md](/Users/alex/code/alextac98/prismo/docs/DEVELOPMENT.md): local development workflow, controls, and implementation notes for extending the prototype
+- [Architecture](./ARCHITECTURE.md): workspace structure, runtime flow, store behavior, and UI structure
+- [Development](./DEVELOPMENT.md): local development workflow, controls, and implementation notes for extending the prototype
 
 ## Scope
 
