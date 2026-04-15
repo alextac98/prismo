@@ -111,9 +111,8 @@ Likely future expansions:
 
 ## Website and Docs
 
-The project website is built with Docusaurus from [website/](website/), and it
-uses the markdown files in [docs/](docs/) as the source for the `/docs`
-section of the site.
+The project website is built with Docusaurus from `website/`, and it uses the
+markdown files in `docs/` as the source for the `/docs` section of the site.
 
 Build the static site with:
 
