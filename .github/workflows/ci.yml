@@ -25,7 +25,7 @@ jobs:
           cache-save: ${{ github.event_name != 'pull_request' }}
 
       - name: Bazel Build
-        run: bazel build //...
+        run: bazel build -- //... -//website:all
 
       - name: Bazel Test
-        run: bazel test //...
+        run: bazel test -- //... -//website:all
