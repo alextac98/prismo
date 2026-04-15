@@ -5,8 +5,7 @@ use serde::de::DeserializeOwned;
 
 pub use prismo_plugin_protocol::{ChannelDescriptor, Health, Init, Sample, Value, ValueKind};
 use prismo_plugin_protocol::{
-    DeclareChannels, Envelope, Hello, Log, Message, SampleBatch, read_delimited,
-    write_delimited,
+    DeclareChannels, Envelope, Hello, Log, Message, SampleBatch, read_delimited, write_delimited,
 };
 
 const PROTOCOL_VERSION: u32 = 1;

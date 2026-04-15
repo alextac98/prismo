@@ -2,24 +2,28 @@
 id: architecture
 title: Architecture
 slug: /architecture
-description: Workspace structure, data flow, store behavior, and UI layout.
+description: How Prismo is structured internally, from plugins to the terminal UI.
 ---
 
 # Architecture
 
 ## Overview
 
-`prismo` is structured as a small Rust workspace with a clear split between:
+Prismo is built around a simple idea: plugins emit telemetry, the host
+normalizes it, and the terminal UI renders the latest view of the system.
+
+Internally, the project is split into a few main parts:
+
 - telemetry ingestion and modeling
 - plugin protocol and process hosting
 - TUI rendering and interaction
 - application runtime wiring
 - plugin SDKs and implementations
 
-The current architecture is intentionally simple but now uses a protocol-first
-plugin boundary.
+This structure keeps the UI focused on inspection while making it possible to
+adapt Prismo to different systems through plugins.
 
-## Crates
+## Project Layout
 
 ## `crates/core`
 
@@ -33,17 +37,17 @@ This crate owns the core telemetry concepts:
 - `PluginRuntimeState`
 - `TelemetryStore`
 
-It owns the internal telemetry contract used after plugin messages are normalized by the host.
+It defines the internal telemetry model used after plugin messages are normalized by the host.
 
 ## `crates/plugin-protocol`
 
-This crate owns the external plugin contract:
+This crate defines the external plugin contract:
 - protobuf message types
 - length-prefixed frame helpers
 
 ## `crates/plugin-host`
 
-This crate owns:
+This crate handles:
 - plugin manifest parsing and discovery
 - subprocess spawn and supervision
 - `stdin` / `stdout` / `stderr` transport
@@ -53,13 +57,13 @@ This crate owns:
 
 ## `crates/plugin-sdk/rust`
 
-This crate is the first plugin authoring SDK for the subprocess protocol.
+This crate is the Rust SDK for writing subprocess plugins.
 
 ## `crates/plugin-sdk/cpp`
 
 This crate exposes a small Diplomat-backed C++ surface on top of the Rust SDK core.
-It exists so C++ plugins can reuse the same stdio framing and protobuf implementation
-without reimplementing the protocol natively yet.
+It lets C++ plugins reuse the same stdio framing and protobuf implementation
+without reimplementing the protocol natively.
 
 ## `plugins/example-rust`
 
@@ -87,7 +91,7 @@ It renders from `StoreSnapshot` only. It does not talk directly to plugins.
 
 ## `app`
 
-This crate is the executable:
+This crate is the executable. It:
 - accepts an optional `--plugins` override directory
 - auto-discovers plugins from a sibling `plugins/` directory by default
 - starts plugin subprocesses through `plugin-host`
@@ -96,11 +100,11 @@ This crate is the executable:
 - drives the TUI render loop
 - handles clipboard yank via OSC 52
 
-There is no longer any special in-process example-plugin path in the app itself. All examples go through the same external plugin boundary.
+All example plugins go through the same external plugin boundary as real integrations.
 
 ## Data Flow
 
-The current runtime looks like this:
+At runtime, Prismo looks like this:
 
 ```text
 plugin subprocess -> stdio + protobuf -> plugin-host -> RuntimeEvent -> app -> TelemetryStore -> StoreSnapshot -> tui
@@ -135,7 +139,7 @@ The store keeps:
 
 ## Store Behavior
 
-Important current store rules:
+Important store rules:
 - channels are keyed by `(plugin_id, path)` in a `BTreeMap`
 - numeric history retention is capped at 64 samples
 - staleness is adaptive: a channel is stale when time since last sample exceeds `3x` the most recent observed interval
@@ -145,7 +149,7 @@ Important current store rules:
 
 ## Plugin Model
 
-Today the plugin model is subprocess-first:
+Prismo uses a subprocess-first plugin model:
 - each plugin runs as a child process
 - the host sends `Init` on `stdin`
 - the plugin writes framed protobuf messages on `stdout`
@@ -159,7 +163,7 @@ The current Rust and C++ example plugins send:
 
 ## Build System
 
-Bazel is the primary build system:
+Bazel is the primary build system for the repository:
 - `MODULE.bazel` pins the Bazel module graph
 - `rules_rust` provides the hermetic Rust toolchain
 - `toolchains_llvm` provides the hermetic C++ toolchain used for the in-repo C++ plugin
@@ -168,7 +172,7 @@ Bazel is the primary build system:
 - each workspace package has its own `BUILD.bazel`
 - plugin manifests are checked into plugin directories and packaged unchanged by Bazel
 
-The current downstream Bazel surface is intentionally small:
+The downstream Bazel surface is intentionally small:
 - `prismo_plugin` packages an executable plus its checked-in manifest
 - `prismo_bundle` assembles the runnable bundle layout and is itself executable via `bazel run`
 
@@ -177,7 +181,7 @@ The current C++ path is intentionally Rust-backed:
 - Bazel runs a Rust Diplomat codegen tool and exports the generated C and C++ headers
 - `plugins/example-cpp` links that Rust library into a Bazel-built C++ binary
 
-Cargo manifests remain in the repo as dependency metadata and editor/tooling support, not as the primary execution path.
+Cargo manifests remain in the repo for dependency metadata and editor/tooling support, not as the primary execution path.
 
 ## UI Structure
 
@@ -190,7 +194,7 @@ The overall layout is:
 - wide terminals: details on the left, channels on the right, footer on the bottom
 - narrow terminals: details on top, channels below, footer on the bottom
 
-The current channels pane is a tree:
+The channels pane is a tree:
 - namespaces are derived from dot-separated channel paths
 - namespaces can be collapsed individually with `Enter`
 - the full tree can be toggled with `z`
@@ -231,7 +235,7 @@ The status bar is intentionally compact:
 
 The help overlay is the canonical shortcut reference for the app.
 
-## Design Limits of the Current Prototype
+## Current Limits
 
 The current implementation does not yet have:
 - transport plugins separate from decoders

@@ -2,46 +2,36 @@
 id: development
 title: Development
 slug: /development
-description: Local workflow, extension points, and implementation notes.
+description: Local development workflow, extension points, and contributor notes.
 ---
 
 # Development
 
+The primary build system used by Prismo is Bazel, which provides a hermetic and reproducible build environment for both the Rust and C++ parts of the project. Cargo manifests are still present for the Rust crates to allow for IDE integration and because `rules_rust` uses them to understand the workspace dependency graph.
+
 ## Local Workflow
 
-The current in-repo dev path is the Bazel example bundle:
+The main in-repo development path is the Bazel example bundle:
 
 ```bash
 bazel run //app:example_prismo
+# Or the shortcut
+bazel run //:prismo
 ```
 
-That target bundles the app with both in-repo example plugins.
+That target bundles the app with both in-repo example plugins so you can work on the full flow locally.
 
-Build and test:
+Bazel will automatically manage any tests that are defined. You can run all tests with:
 
 ```bash
-cargo test
-bazel build //app:example_prismo
+bazel test //...
 ```
 
 Format the workspace:
 
 ```bash
-cargo fmt
+bazel run //:format
 ```
-
-## Current Interaction Model
-
-Use `?` inside the app for the live help overlay.
-
-Important behavior to remember while developing:
-- `Tab` changes which pane has focus
-- `Channels` focus changes which row in the tree is selected
-- `Details` is a fixed summary pane with a cursor for copy, but it does not scroll
-- `Latest Value` focus moves a text cursor within that pane and may scroll
-- `y` behaves differently by focus
-- `/` opens the filter prompt and temporarily takes over keyboard input
-- `:` opens command mode, and `:q` is the only quit path
 
 ## Clipboard Behavior
 
@@ -52,17 +42,21 @@ That means:
 - it may be ignored in some local terminals, remote shells, or multiplexers depending on configuration
 - the UI still shows success or failure messages based on whether the write itself succeeded
 
-## Where To Extend The Prototype
+A shortlist of known good OSC 52 terminals include:
+- [xterm](https://invisible-island.net/xterm/)
+- [Ghostty](https://github.com/ghostty/ghostty)
+- [iTerm2](https://iterm2.com/)
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+- [Alacritty](https://github.com/alacritty/alacritty)
+- [Windows Terminal](https://aka.ms/terminal)
+
+Notably, Apple Terminal does not support OSC 52.
 
 ## Add a New Plugin
 
-Start by deciding which boundary you need:
-- `crates/plugin-protocol` for the wire contract
-- `crates/plugin-host` for manifest discovery, process supervision, and normalization
-- `crates/plugin-sdk/rust` for a Rust authoring helper
-- `crates/plugin-sdk/cpp` for the current C++ authoring bridge
-- `plugins/example-rust` for a reference subprocess plugin
-- `plugins/example-cpp` for a reference C++ subprocess plugin
+Plugins are designed to exist anywhere, either in this repo or closed sourced in your own projects. The only requirement is that they follow the protobuf-over-stdio contract and provide a manifest for discovery.
+
+If you would like to build a plugin along with the project, please place it in the `plugins/` directory and add a `prismo-plugin.toml` manifest. The example Rust and C++ plugins can be used as a reference.
 
 For a new Rust plugin:
 - ship a plugin manifest with a command entrypoint
@@ -70,7 +64,7 @@ For a new Rust plugin:
 - emit `Hello`, `DeclareChannels`, `SampleBatch`, and optional `Health`
 - send descriptors before samples that reference them
 
-The normal runtime path is now discovery-first:
+The normal runtime path is discovery-first:
 - bundle plugins under `./plugins` relative to the `prismo` executable
 - use `--plugins /path/to/plugins` when you want to point `prismo` at a different plugin directory
 - for local repo development, use the Bazel example bundle targets so the plugin binaries are laid out next to their manifests
@@ -87,16 +81,16 @@ For downstream Bazel integration:
 - use `prismo_plugin` to package a plugin executable plus a checked-in manifest
 - use `prismo_bundle` to assemble `prismo` plus packaged plugins; the bundle target itself is runnable with `bazel run`
 
-## Add New Renderers
+## Renderers
 
-Add rendering logic in `crates/tui/src/lib.rs`.
+The TUI rendering logic is intentionally separate from the core data model and plugin protocol, so new renderers can be added without touching the runtime or plugin contract. Rendering logic lives in `crates/tui/src/lib.rs`.
 
 The current renderer split is by `ChannelValue`:
 - bytes -> hex/ASCII block
 - numeric -> text summary plus line chart
 - text/integer/bool -> text block
 
-A few current UI rules matter when extending renderers:
+A few UI rules matter when extending renderers:
 - `Details` should stay compact and fixed-height
 - long payloads belong in `Latest Value`
 - scrollable panes should use the shared scrollbar path
@@ -115,13 +109,27 @@ Likely future expansions:
 - source stream IDs
 - richer quality/validity metadata
 
-## Suggested Next Engineering Steps
+## Website and Docs
 
-- add documentation or tests around the current tree/filter/command interaction model
-- snapshot-test the TUI rendering surface
-- separate transport ingestion from decode logic
-- introduce a decoder plugin trait
-- add a Python SDK on top of the shared protobuf protocol
+The project website is built with Docusaurus from [website/](website/), and it
+uses the markdown files in [docs/](docs/) as the source for the `/docs`
+section of the site.
+
+Build the static site with:
+
+```bash
+bazel build //website:site
+```
+
+The current prototype is intentionally small:
+- a Rust workspace with a TUI app, an internal telemetry core, a protobuf-based plugin protocol, and example Rust and C++ plugins
+- a two-pane telemetry UI built with `ratatui` and `crossterm`
+- subprocess example plugins that generate randomized or synthetic telemetry so the UI can be developed without a live target
+- a workspace split that keeps app wiring, UI, and telemetry contracts separate
+
+## Want to Contribute?
+
+We appreciate any contributions! If you want to contribute, please open an issue and a PR with your proposed change. We are happy to provide feedback and guidance on how to get your contribution merged. If you don't know what to get started on, take a look at open issues with the "good first issue" label.
 
 ## Notes For Future Multi-Language Plugins
 

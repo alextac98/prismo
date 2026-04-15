@@ -88,9 +88,5 @@ fn unique_temp_dir() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("system time")
         .as_nanos();
-    env::temp_dir().join(format!(
-        "prismo-diplomat-{}-{}",
-        std::process::id(),
-        nanos
-    ))
+    env::temp_dir().join(format!("prismo-diplomat-{}-{}", std::process::id(), nanos))
 }
