@@ -19,6 +19,12 @@ Build the static site with:
 bazel build //website:site
 ```
 
+Run the live-reloading development server with:
+
+```bash
+bazel run //website:dev
+```
+
 Preview the built site locally with:
 
 ```bash

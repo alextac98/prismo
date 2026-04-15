@@ -46,8 +46,7 @@ impl SyntheticChannelSpec {
     fn descriptor(self) -> ChannelDescriptor {
         channel_descriptor(
             self.path,
-            self
-                .path
+            self.path
                 .rsplit('.')
                 .next()
                 .unwrap_or(self.path)

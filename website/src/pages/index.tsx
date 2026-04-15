@@ -7,16 +7,16 @@ import styles from "./index.module.css";
 
 const features = [
   {
-    title: "Terminal-native",
-    body: "Stay in the shell. Fast keyboard\nnavigation, copy support, live\nfilters, and a compact status bar.",
+    title: "Terminal First",
+    body: "See your live telemetry in a friendly TUI built for quick debugging and fast iteration.",
   },
   {
-    title: "Plugin protocol",
-    body: "Rust and C++ plugins share the\nsame protobuf-over-stdio boundary.\nBring your own language.",
+    title: "Plugin Extensible",
+    body: "Connect Prismo to your own system with plugins, whether you are working on embedded targets or Linux hosts.",
   },
   {
-    title: "Bazel-first",
-    body: "Hermetic toolchains and workspace-\nlevel dependency control. Cargo\nmetadata available for IDE support.",
+    title: "Simple and Intuitive",
+    body: "Stay close to the system you are debugging with a compact UI, live filters, and copy-friendly output.",
   },
 ];
 
@@ -27,18 +27,20 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title={siteConfig.title}
-      description="Prismo is a protocol-first terminal telemetry viewer for embedded and target-side debugging."
+      description="Prismo is a terminal-first telemetry viewer for debugging systems with live data."
     >
       <main className={styles.page}>
         {/* ── Hero ── */}
         <section className={styles.hero}>
           <h1 className={styles.heroTitle}>Prismo</h1>
           <p className={styles.heroTagline}>
-            <span className={styles.promptChar}>$</span> Live telemetry, right
-            in the terminal.<span className={styles.blink}>_</span>
+            <span className={styles.promptChar}>$</span> Live telemetry in the
+            terminal.<span className={styles.blink}>_</span>
           </p>
           <p className={styles.heroSubtext}>
-            {siteConfig.tagline} View your data directly from the source, and
+            Prismo is a fast telemetry viewer for debugging systems. Connect it
+            to your robot, spacecraft, or other system by building your own
+            plugin and inspect live data without leaving the shell.
           </p>
           <div className={styles.heroScreenshot}>
             <div className={styles.termFrame}>

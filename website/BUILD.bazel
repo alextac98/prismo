@@ -47,6 +47,30 @@ docusaurus_bin.docusaurus_binary(
     ],
 )
 
+docusaurus_bin.docusaurus_binary(
+    name = "dev",
+    args = [
+        "start",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "3000",
+        "--no-open",
+    ],
+    chdir = "website",
+    data = [
+        ":node_modules",
+        "package.json",
+        "pnpm-lock.yaml",
+        "docusaurus.config.ts",
+        "sidebars.ts",
+        "tsconfig.json",
+        ":site_src",
+        ":static_assets",
+        "//docs:site_docs",
+    ],
+)
+
 js_run_binary(
     name = "site",
     tool = ":site_bin",
