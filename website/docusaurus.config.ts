@@ -11,7 +11,13 @@ const config: Config = {
   title: "Prismo",
   tagline: "An adaptable terminal telemetry viewer.",
   future: {
-    v4: true,
+    v4: {
+      removeLegacyPostBuildHeadAttribute: false,
+      useCssCascadeLayers: false,
+      siteStorageNamespacing: false,
+      fasterByDefault: false,
+      mdx1CompatDisabledByDefault: false,
+    },
   },
   url: siteUrl,
   baseUrl,
