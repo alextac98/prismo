@@ -8,6 +8,7 @@ members = [
     "crates/tui",
     "app",
     "plugins/example-rust",
+    "tools/homepage-demo",
     "tools/ffi",
 ]
 resolver = "2"

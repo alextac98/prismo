@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "prismo_example_rust"
+path = "src/lib.rs"
+
 [[bin]]
 name = "example_rust"
 path = "src/main.rs"
@@ -12,4 +16,5 @@ path = "src/main.rs"
 anyhow.workspace = true
 rand.workspace = true
 serde.workspace = true
+prismo-core = { path = "../../crates/core" }
 prismo-plugin-sdk-rust = { path = "../../crates/plugin-sdk/rust" }

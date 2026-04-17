@@ -161,7 +161,10 @@ impl TelemetryStore {
     }
 
     pub fn snapshot(&self) -> StoreSnapshot {
-        let now = Instant::now();
+        self.snapshot_at(Instant::now())
+    }
+
+    pub fn snapshot_at(&self, now: Instant) -> StoreSnapshot {
         let plugin_ids = self
             .plugin_health
             .keys()

@@ -812,6 +812,7 @@ name = "prismo-example-rust"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "prismo-core",
  "prismo-plugin-sdk-rust",
  "rand",
  "serde",
@@ -822,6 +823,20 @@ name = "prismo-ffi-tools"
 version = "0.1.0"
 dependencies = [
  "diplomat-tool",
+]
+
+[[package]]
+name = "prismo-homepage-demo"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crossterm 0.29.0",
+ "prismo-core",
+ "prismo-example-rust",
+ "prismo-tui",
+ "ratatui",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

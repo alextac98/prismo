@@ -6,6 +6,13 @@ npm_link_all_packages(
     name = "node_modules",
 )
 
+genrule(
+    name = "homepage_demo_data",
+    outs = ["src/homepageDemoData.ts"],
+    cmd = "$(location //tools/homepage-demo:homepage_demo) > \"$@\"",
+    tools = ["//tools/homepage-demo:homepage_demo"],
+)
+
 docusaurus_bin.docusaurus_binary(
     name = "site_bin",
     chdir = "website",
@@ -85,7 +92,7 @@ js_run_binary(
 
 filegroup(
     name = "site_src",
-    srcs = glob(["src/**"], exclude = ["**/node_modules/**"]),
+    srcs = glob(["src/**"], exclude = ["**/node_modules/**"]) + [":homepage_demo_data"],
 )
 
 filegroup(

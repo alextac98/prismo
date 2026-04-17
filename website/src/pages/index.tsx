@@ -1,8 +1,10 @@
-import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import useBaseUrl from "@docusaurus/useBaseUrl";
 import Layout from "@theme/Layout";
 
+import homepageDemo from "../homepageDemoData";
 import styles from "./index.module.css";
 
 const features = [
@@ -19,6 +21,106 @@ const features = [
     body: "Stay close to the system you are debugging with a compact UI, live filters, and copy-friendly output.",
   },
 ];
+
+function segmentStyle(
+  style: (typeof homepageDemo.styles)[number],
+): CSSProperties {
+  return {
+    ...(style.fg ? { color: style.fg } : {}),
+    ...(style.bg ? { backgroundColor: style.bg } : {}),
+    ...(style.bold ? { fontWeight: 700 } : {}),
+    ...(style.dim ? { opacity: 0.72 } : {}),
+    ...(style.italic ? { fontStyle: "italic" } : {}),
+    ...(style.underlined ? { textDecoration: "underline" } : {}),
+  };
+}
+
+function HomepageTerminalDemo({
+  screenshotUrl,
+}: {
+  screenshotUrl: string;
+}): ReactNode {
+  const [frameIndex, setFrameIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const frameCount = homepageDemo.frames.length;
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (reducedMotion || paused || frameCount === 0) {
+      return undefined;
+    }
+
+    const currentFrame = homepageDemo.frames[frameIndex];
+    const timeoutId = window.setTimeout(() => {
+      setFrameIndex((frameIndex + 1) % frameCount);
+    }, currentFrame.durationMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [frameCount, frameIndex, paused, reducedMotion]);
+
+  if (reducedMotion) {
+    return (
+      <img
+        alt="Prismo terminal telemetry viewer"
+        className={styles.screenshot}
+        src={screenshotUrl}
+      />
+    );
+  }
+
+  const frame = homepageDemo.frames[frameIndex] ?? homepageDemo.frames[0];
+
+  return (
+    <div
+      className={styles.demoViewport}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      <div className={styles.demoMeta}>
+        <span className={styles.demoLabel}>Build-time live demo</span>
+        <button
+          className={styles.demoButton}
+          onClick={() => setFrameIndex(0)}
+          type="button"
+        >
+          Restart
+        </button>
+      </div>
+      <div
+        aria-label="Animated terminal demo of the Prismo TUI"
+        className={styles.demoScreen}
+        role="img"
+      >
+        {frame.lines.map((line, lineIndex) => (
+          <div key={lineIndex} className={styles.demoLine}>
+            {line.map((segment, segmentIndex) => (
+              <span
+                key={`${lineIndex}-${segmentIndex}`}
+                style={segmentStyle(homepageDemo.styles[segment.style])}
+              >
+                {segment.text}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Home(): ReactNode {
   const { siteConfig } = useDocusaurusContext();
@@ -50,11 +152,7 @@ export default function Home(): ReactNode {
                 <span className={styles.termDot} data-color="green" />
                 <span className={styles.termBarTitle}>prismo</span>
               </div>
-              <img
-                alt="Prismo terminal telemetry viewer"
-                className={styles.screenshot}
-                src={screenshotUrl}
-              />
+              <HomepageTerminalDemo screenshotUrl={screenshotUrl} />
             </div>
           </div>
         </section>

@@ -1,14 +1,27 @@
 load("@crates//:defs.bzl", "all_crate_deps")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 load("//bazel:defs.bzl", "prismo_plugin")
 
 exports_files(["prismo-plugin.toml"])
+
+rust_library(
+    name = "example_rust_lib",
+    srcs = ["src/lib.rs"],
+    crate_name = "prismo_example_rust",
+    edition = "2024",
+    deps = all_crate_deps(normal = True) + ["//crates/core:core"],
+    visibility = ["//visibility:public"],
+)
 
 rust_binary(
     name = "example_rust",
     srcs = ["src/main.rs"],
     edition = "2024",
-    deps = all_crate_deps(normal = True) + ["//crates/plugin-sdk/rust:plugin_sdk_rust"],
+    deps = all_crate_deps(normal = True) + [
+        ":example_rust_lib",
+        "//crates/core:core",
+        "//crates/plugin-sdk/rust:plugin_sdk_rust",
+    ],
     visibility = ["//visibility:public"],
 )
 

@@ -139,6 +139,56 @@
     width: 100%;
 }
 
+.demoViewport {
+    background:
+        radial-gradient(circle at top, rgba(97, 196, 200, 0.08), transparent 45%),
+        #0a0a0a;
+    color: #d9e2ea;
+    padding: 0.9rem 1rem 1rem;
+}
+
+.demoMeta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.demoLabel {
+    color: rgba(217, 226, 234, 0.72);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.demoButton {
+    border: 1px solid rgba(159, 231, 233, 0.35);
+    background: rgba(159, 231, 233, 0.08);
+    color: #d9e2ea;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.72rem;
+    padding: 0.2rem 0.55rem;
+}
+
+.demoButton:hover {
+    background: rgba(159, 231, 233, 0.16);
+}
+
+.demoScreen {
+    font-family: var(--ifm-font-family-monospace);
+    font-size: clamp(0.47rem, 0.87vw, 0.86rem);
+    line-height: 1.2;
+    overflow-x: auto;
+    white-space: pre;
+}
+
+.demoLine {
+    display: block;
+    min-height: 1.2em;
+}
+
 /* ════════════════════════════════════
    Section dividers
    ════════════════════════════════════ */
@@ -225,6 +275,14 @@
     .featureGrid {
         grid-template-columns: 1fr;
         gap: 0.75rem;
+    }
+
+    .demoViewport {
+        padding: 0.75rem;
+    }
+
+    .demoScreen {
+        font-size: 0.5rem;
     }
 
     .featureCard {

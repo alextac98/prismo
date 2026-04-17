@@ -1,0 +1,19 @@
+[package]
+name = "prismo-homepage-demo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "homepage_demo"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+crossterm.workspace = true
+ratatui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+prismo-core = { path = "../../crates/core" }
+prismo-tui = { path = "../../crates/tui" }
+prismo-example-rust = { path = "../../plugins/example-rust" }
