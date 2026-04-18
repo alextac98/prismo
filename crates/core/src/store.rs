@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, VecDeque};
 use std::time::{Duration, Instant};
 
 use crate::{
-    ChannelDescriptor, ChannelSample, PluginHealth, PluginRuntimeState, PluginSnapshot,
-    PluginStatusUpdate, RuntimeEvent, TelemetryUpdate,
+    ChannelDescriptor, ChannelSample, NumericPoint, PluginHealth, PluginRuntimeState,
+    PluginSnapshot, PluginStatusUpdate, RuntimeEvent, TelemetryUpdate,
 };
 
 const HISTORY_LIMIT: usize = 64;
@@ -14,7 +14,7 @@ pub struct ChannelSnapshot {
     pub plugin_id: String,
     pub descriptor: ChannelDescriptor,
     pub latest: Option<ChannelSample>,
-    pub history: Vec<f64>,
+    pub history: Vec<NumericPoint>,
     pub update_count: u64,
     pub rate_hz: Option<f64>,
     pub is_stale: bool,
@@ -33,7 +33,7 @@ struct ChannelState {
     plugin_id: String,
     descriptor: ChannelDescriptor,
     latest: Option<ChannelSample>,
-    numeric_history: VecDeque<f64>,
+    numeric_history: VecDeque<NumericPoint>,
     update_count: u64,
     last_interval: Option<Duration>,
     rate_hz: Option<f64>,
@@ -55,8 +55,8 @@ impl ChannelState {
     fn apply_sample(&mut self, sample: ChannelSample) {
         self.last_interval = self.latest.as_ref().and_then(|previous| {
             sample
-                .source_timestamp_unix_ns
-                .checked_sub(previous.source_timestamp_unix_ns)
+                .effective_timestamp_unix_ns()
+                .checked_sub(previous.effective_timestamp_unix_ns())
                 .map(Duration::from_nanos)
                 .or_else(|| {
                     sample
@@ -73,7 +73,10 @@ impl ChannelState {
             if self.numeric_history.len() == HISTORY_LIMIT {
                 self.numeric_history.pop_front();
             }
-            self.numeric_history.push_back(value);
+            self.numeric_history.push_back(NumericPoint {
+                timestamp_unix_ns: sample.effective_timestamp_unix_ns(),
+                value,
+            });
         }
 
         self.latest = Some(sample);
@@ -210,8 +213,8 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use crate::{
-        ChannelDescriptor, ChannelSample, ChannelValue, PluginHealth, PluginRuntimeState,
-        PluginStatusUpdate, RuntimeEvent, TelemetryStore, TelemetryUpdate,
+        ChannelDescriptor, ChannelSample, ChannelValue, NumericPoint, PluginHealth,
+        PluginRuntimeState, PluginStatusUpdate, RuntimeEvent, TelemetryStore, TelemetryUpdate,
     };
 
     #[test]
@@ -283,7 +286,19 @@ mod tests {
 
         assert_eq!(snapshot.total_updates, 2);
         assert_eq!(snapshot.dropped_updates, 0);
-        assert_eq!(channel.history, vec![27.2, 27.4]);
+        assert_eq!(
+            channel.history,
+            vec![
+                NumericPoint {
+                    timestamp_unix_ns: 100_000_000,
+                    value: 27.2,
+                },
+                NumericPoint {
+                    timestamp_unix_ns: 200_000_000,
+                    value: 27.4,
+                },
+            ]
+        );
         assert_eq!(channel.update_count, 2);
         assert_eq!(
             channel.latest.as_ref().map(|sample| sample.sequence),
@@ -295,6 +310,41 @@ mod tests {
         assert_eq!(plugin.health.last_error.as_deref(), Some("none"));
         assert!(!channel.is_stale);
         assert!(channel.rate_hz.expect("sample rate") > 0.0);
+    }
+
+    #[test]
+    fn falls_back_to_receive_time_when_source_timestamp_missing() {
+        let mut store = TelemetryStore::new();
+        let start = Instant::now();
+
+        store.apply_event(RuntimeEvent::Telemetry(TelemetryUpdate {
+            plugin_id: "example-rust".to_string(),
+            descriptors: vec![descriptor("power.battery.voltage", Some("V"))],
+            samples: vec![ChannelSample {
+                path: "power.battery.voltage".to_string(),
+                value: ChannelValue::Float(27.2),
+                observed_at: start,
+                received_timestamp_unix_ns: 900_000_000,
+                source_timestamp_unix_ns: 0,
+                sequence: 1,
+            }],
+            health: None,
+        }));
+
+        let snapshot = store.snapshot();
+        let channel = snapshot
+            .channels
+            .iter()
+            .find(|channel| channel.descriptor.path == "power.battery.voltage")
+            .expect("channel snapshot");
+
+        assert_eq!(
+            channel.history,
+            vec![NumericPoint {
+                timestamp_unix_ns: 900_000_000,
+                value: 27.2,
+            }]
+        );
     }
 
     fn descriptor(path: &str, unit: Option<&str>) -> ChannelDescriptor {
@@ -311,6 +361,7 @@ mod tests {
             path: path.to_string(),
             value: ChannelValue::Float(value),
             observed_at: timestamp,
+            received_timestamp_unix_ns: sequence * 100_000_000,
             source_timestamp_unix_ns: sequence * 100_000_000,
             sequence,
         }

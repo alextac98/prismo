@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::config::{DiscoveredPlugin, PluginManifest, default_plugin_dir, discover_plugins};
 use anyhow::{Context, Result, anyhow, bail};
@@ -316,6 +316,7 @@ fn start_plugin_process(
                 Some(Message::SampleBatch(batch)) => {
                     validate_plugin_id(&plugin.plugin_id, &batch.plugin_id)?;
                     let observed_at = Instant::now();
+                    let received_timestamp_unix_ns = unix_timestamp_ns();
                     tx.send(RuntimeEvent::Telemetry(TelemetryUpdate {
                         plugin_id: plugin.plugin_id.clone(),
                         descriptors: Vec::new(),
@@ -327,6 +328,7 @@ fn start_plugin_process(
                                     path: sample.channel_path,
                                     value: decode_value(sample.value)?,
                                     observed_at,
+                                    received_timestamp_unix_ns,
                                     source_timestamp_unix_ns: sample.timestamp_unix_ns,
                                     sequence: sample.sequence,
                                 })
@@ -408,6 +410,13 @@ fn start_plugin_process(
             }
         }
     }
+}
+
+fn unix_timestamp_ns() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos() as u64)
+        .unwrap_or_default()
 }
 
 fn resolve_command(

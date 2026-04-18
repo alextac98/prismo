@@ -1,9 +1,9 @@
 use std::cmp;
 use std::collections::{BTreeMap, HashSet};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
-use prismo_core::{ChannelSnapshot, ChannelValue, StoreSnapshot};
+use prismo_core::{ChannelSnapshot, ChannelValue, NumericPoint, StoreSnapshot};
 use ratatui::layout::{Constraint, Direction, Layout, Position, Rect};
 use ratatui::prelude::{Alignment, Color, Line, Modifier, Style};
 use ratatui::symbols;
@@ -112,6 +112,9 @@ enum LatestPaneContent {
     Numeric {
         summary: Vec<SelectableLine>,
         points: Vec<(f64, f64)>,
+        min_x: f64,
+        max_x: f64,
+        x_labels: [String; 2],
         min_y: f64,
         max_y: f64,
     },
@@ -907,6 +910,9 @@ fn render_latest_value(
         LatestPaneContent::Numeric {
             summary,
             points,
+            min_x,
+            max_x,
+            x_labels,
             min_y,
             max_y,
         } => {
@@ -919,7 +925,6 @@ fn render_latest_value(
                 render_selectable_text(frame, sections[0], summary, cursor, scroll_offset, focused);
 
             if sections[1].height > 0 {
-                let max_x = (points.len().saturating_sub(1) as f64).max(1.0);
                 let dataset = Dataset::default()
                     .graph_type(GraphType::Line)
                     .marker(symbols::Marker::Braille)
@@ -928,8 +933,11 @@ fn render_latest_value(
                 let chart = Chart::new(vec![dataset])
                     .x_axis(
                         Axis::default()
-                            .bounds([0.0, max_x])
-                            .labels([Line::from("old"), Line::from("now")]),
+                            .bounds([*min_x, *max_x])
+                            .labels([
+                                Line::from(x_labels[0].clone()),
+                                Line::from(x_labels[1].clone()),
+                            ]),
                     )
                     .y_axis(Axis::default().bounds([*min_y, *max_y]).labels([
                         Line::from(format!("{min_y:.1}")),
@@ -1472,11 +1480,22 @@ fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent 
             labeled_value_line("Last Received", &last_received, value_style()),
         ]),
         Some(ChannelValue::Integer(_) | ChannelValue::Float(_)) if !channel.history.is_empty() => {
+            let now_timestamp_unix_ns = current_unix_timestamp_ns();
+            let oldest_timestamp_unix_ns = channel
+                .history
+                .first()
+                .map(|point| point.timestamp_unix_ns)
+                .unwrap_or(now_timestamp_unix_ns);
+            let newest_timestamp_unix_ns = channel
+                .history
+                .last()
+                .map(|point| point.timestamp_unix_ns)
+                .unwrap_or(now_timestamp_unix_ns);
+            let chart_end_timestamp_unix_ns = newest_timestamp_unix_ns.max(now_timestamp_unix_ns);
             let points = channel
                 .history
                 .iter()
-                .enumerate()
-                .map(|(index, value)| (index as f64, *value))
+                .map(|point| (point.timestamp_unix_ns as f64, point.value))
                 .collect::<Vec<_>>();
             let (min_y, max_y) = history_bounds(&channel.history);
             LatestPaneContent::Numeric {
@@ -1497,6 +1516,20 @@ fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent 
                     ),
                 ],
                 points,
+                min_x: oldest_timestamp_unix_ns as f64,
+                max_x: chart_end_timestamp_unix_ns as f64,
+                x_labels: [
+                    format_chart_edge_label(
+                        "old",
+                        oldest_timestamp_unix_ns,
+                        chart_end_timestamp_unix_ns,
+                    ),
+                    format_chart_edge_label(
+                        "now",
+                        chart_end_timestamp_unix_ns,
+                        chart_end_timestamp_unix_ns,
+                    ),
+                ],
                 min_y,
                 max_y,
             }
@@ -1776,12 +1809,36 @@ fn cursor_style() -> Style {
     Style::default().fg(Color::Black).bg(Color::White)
 }
 
-fn history_bounds(history: &[f64]) -> (f64, f64) {
+fn current_unix_timestamp_ns() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos() as u64)
+        .unwrap_or_default()
+}
+
+fn format_chart_edge_label(label: &str, timestamp_unix_ns: u64, end_timestamp_unix_ns: u64) -> String {
+    if label == "now" {
+        return "now".to_string();
+    }
+
+    format_elapsed_ns(end_timestamp_unix_ns.saturating_sub(timestamp_unix_ns))
+}
+
+fn format_elapsed_ns(duration_ns: u64) -> String {
+    let duration = Duration::from_nanos(duration_ns);
+    if duration.as_secs() > 0 {
+        format!("{:.1}s ago", duration.as_secs_f64())
+    } else {
+        format!("{}ms ago", duration.as_millis())
+    }
+}
+
+fn history_bounds(history: &[NumericPoint]) -> (f64, f64) {
     let mut min = f64::INFINITY;
     let mut max = f64::NEG_INFINITY;
-    for value in history {
-        min = min.min(*value);
-        max = max.max(*value);
+    for point in history {
+        min = min.min(point.value);
+        max = max.max(point.value);
     }
 
     if !min.is_finite() || !max.is_finite() {
@@ -1800,8 +1857,8 @@ fn history_bounds(history: &[f64]) -> (f64, f64) {
 mod tests {
     use std::time::Instant;
 
-    use super::{LatestPaneContent, build_channel_latest_content};
-    use prismo_core::{ChannelDescriptor, ChannelSample, ChannelSnapshot, ChannelValue};
+    use super::{LatestPaneContent, build_channel_latest_content, format_chart_edge_label};
+    use prismo_core::{ChannelDescriptor, ChannelSample, ChannelSnapshot, ChannelValue, NumericPoint};
 
     #[test]
     fn integer_channels_render_numeric_latest_content() {
@@ -1817,10 +1874,24 @@ mod tests {
                 path: "counter.value".to_string(),
                 value: ChannelValue::Integer(42),
                 observed_at: Instant::now(),
+                received_timestamp_unix_ns: 3_000_000_000,
                 source_timestamp_unix_ns: 42,
                 sequence: 1,
             }),
-            history: vec![40.0, 41.0, 42.0],
+            history: vec![
+                NumericPoint {
+                    timestamp_unix_ns: 1_000_000_000,
+                    value: 40.0,
+                },
+                NumericPoint {
+                    timestamp_unix_ns: 2_000_000_000,
+                    value: 41.0,
+                },
+                NumericPoint {
+                    timestamp_unix_ns: 3_000_000_000,
+                    value: 42.0,
+                },
+            ],
             update_count: 3,
             rate_hz: Some(2.0),
             is_stale: false,
@@ -1830,15 +1901,38 @@ mod tests {
             LatestPaneContent::Numeric {
                 summary,
                 points,
+                min_x,
+                max_x,
+                x_labels,
                 min_y,
                 max_y,
             } => {
                 assert_eq!(summary.len(), 4);
-                assert_eq!(points, vec![(0.0, 40.0), (1.0, 41.0), (2.0, 42.0)]);
+                assert_eq!(
+                    points,
+                    vec![
+                        (1_000_000_000_f64, 40.0),
+                        (2_000_000_000_f64, 41.0),
+                        (3_000_000_000_f64, 42.0),
+                    ]
+                );
+                assert_eq!(min_x, 1_000_000_000_f64);
+                assert!(max_x >= 3_000_000_000_f64);
+                assert!(x_labels[0].starts_with("old "));
+                assert_eq!(x_labels[1], "now");
                 assert!(min_y < 40.0);
                 assert!(max_y > 42.0);
             }
             LatestPaneContent::Text(_) => panic!("expected numeric content for integer channel"),
         }
+    }
+
+    #[test]
+    fn chart_edge_labels_show_elapsed_time() {
+        assert_eq!(
+            format_chart_edge_label("old", 1_000_000_000, 3_500_000_000),
+            "2.5s ago"
+        );
+        assert_eq!(format_chart_edge_label("now", 3_500_000_000, 3_500_000_000), "now");
     }
 }

@@ -67,8 +67,25 @@ pub struct ChannelSample {
     pub path: String,
     pub value: ChannelValue,
     pub observed_at: Instant,
+    pub received_timestamp_unix_ns: u64,
     pub source_timestamp_unix_ns: u64,
     pub sequence: u64,
+}
+
+impl ChannelSample {
+    pub fn effective_timestamp_unix_ns(&self) -> u64 {
+        if self.source_timestamp_unix_ns > 0 {
+            self.source_timestamp_unix_ns
+        } else {
+            self.received_timestamp_unix_ns
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NumericPoint {
+    pub timestamp_unix_ns: u64,
+    pub value: f64,
 }
 
 #[derive(Clone, Debug, Default)]
