@@ -1460,9 +1460,7 @@ fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent 
                 labeled_value_line("ASCII", &ascii, value_style()),
             ])
         }
-        Some(ChannelValue::Text(_))
-        | Some(ChannelValue::Bool(_))
-        | Some(ChannelValue::Integer(_)) => LatestPaneContent::Text(vec![
+        Some(ChannelValue::Text(_)) | Some(ChannelValue::Bool(_)) => LatestPaneContent::Text(vec![
             labeled_value_line(
                 "Value",
                 &latest
@@ -1473,7 +1471,7 @@ fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent 
             labeled_value_line("Rate", &rate, value_style()),
             labeled_value_line("Last Received", &last_received, value_style()),
         ]),
-        Some(ChannelValue::Float(_)) if !channel.history.is_empty() => {
+        Some(ChannelValue::Integer(_) | ChannelValue::Float(_)) if !channel.history.is_empty() => {
             let points = channel
                 .history
                 .iter()
@@ -1503,6 +1501,17 @@ fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent 
                 max_y,
             }
         }
+        Some(ChannelValue::Integer(_) | ChannelValue::Float(_)) => LatestPaneContent::Text(vec![
+            labeled_value_line(
+                "Value",
+                &latest
+                    .map(|sample| sample.value.to_string())
+                    .unwrap_or_default(),
+                value_style(),
+            ),
+            labeled_value_line("Rate", &rate, value_style()),
+            labeled_value_line("Last Received", &last_received, value_style()),
+        ]),
         _ => LatestPaneContent::Text(vec![plain_line("No detailed renderer for this value yet.")]),
     }
 }
@@ -1785,4 +1794,51 @@ fn history_bounds(history: &[f64]) -> (f64, f64) {
 
     let padding = (max - min) * 0.1;
     (min - padding, max + padding)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Instant;
+
+    use super::{LatestPaneContent, build_channel_latest_content};
+    use prismo_core::{ChannelDescriptor, ChannelSample, ChannelSnapshot, ChannelValue};
+
+    #[test]
+    fn integer_channels_render_numeric_latest_content() {
+        let channel = ChannelSnapshot {
+            plugin_id: "example".to_string(),
+            descriptor: ChannelDescriptor {
+                path: "counter.value".to_string(),
+                display_name: "Counter".to_string(),
+                unit: None,
+                description: "Integer counter".to_string(),
+            },
+            latest: Some(ChannelSample {
+                path: "counter.value".to_string(),
+                value: ChannelValue::Integer(42),
+                observed_at: Instant::now(),
+                source_timestamp_unix_ns: 42,
+                sequence: 1,
+            }),
+            history: vec![40.0, 41.0, 42.0],
+            update_count: 3,
+            rate_hz: Some(2.0),
+            is_stale: false,
+        };
+
+        match build_channel_latest_content(&channel) {
+            LatestPaneContent::Numeric {
+                summary,
+                points,
+                min_y,
+                max_y,
+            } => {
+                assert_eq!(summary.len(), 4);
+                assert_eq!(points, vec![(0.0, 40.0), (1.0, 41.0), (2.0, 42.0)]);
+                assert!(min_y < 40.0);
+                assert!(max_y > 42.0);
+            }
+            LatestPaneContent::Text(_) => panic!("expected numeric content for integer channel"),
+        }
+    }
 }
