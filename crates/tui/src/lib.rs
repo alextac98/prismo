@@ -1349,15 +1349,16 @@ fn build_channel_detail_lines(
 
     vec![
         labeled_value_line("Path", &channel.descriptor.path, primary_style()),
+        detail_row("Type", "channel", "Value", &latest_value),
         SelectableLine {
             raw: format!(
-                "{:<32}  Value: {}",
+                "{:<32}  Units: {}",
                 format!(
                     "Updates: [{}] {}",
                     if channel.is_stale { "stale" } else { "live" },
                     channel.update_count
                 ),
-                latest_value
+                channel.descriptor.unit.as_deref().unwrap_or("-")
             ),
             rendered: Line::from(vec![
                 Span::styled("Updates: ", label_style()),
@@ -1380,19 +1381,25 @@ fn build_channel_detail_lines(
                         ),
                     ),
                 ),
-                Span::styled("Value: ", label_style()),
-                Span::styled(latest_value, value_style()),
+                Span::styled("Units: ", label_style()),
+                Span::styled(
+                    channel
+                        .descriptor
+                        .unit
+                        .as_deref()
+                        .unwrap_or("-")
+                        .to_string(),
+                    value_style(),
+                ),
             ]),
         },
-        detail_row("Type", "channel", "Plugin", &channel.plugin_id),
+        detail_row("Rate", &rate, "Last Received", &last_received),
         detail_row(
-            "Unit",
-            channel.descriptor.unit.as_deref().unwrap_or("-"),
-            "Last Received",
-            &last_received,
+            "Plugin",
+            &channel.plugin_id,
+            "Description",
+            &channel.descriptor.description,
         ),
-        detail_row("Rate", &rate, "Source", &channel.plugin_id),
-        labeled_value_line("Notes", &channel.descriptor.description, value_style()),
     ]
 }
 
@@ -1400,27 +1407,21 @@ fn build_namespace_detail_lines(
     path: &str,
     variable_count: usize,
     child_namespace_count: usize,
-    direct_channel_count: usize,
-    collapsed: bool,
+    _direct_channel_count: usize,
+    _collapsed: bool,
     _filter_mode: bool,
     _filter_input: &str,
 ) -> Vec<SelectableLine> {
     vec![
         labeled_value_line("Path", path, primary_style()),
-        detail_row(
-            "Type",
-            "namespace",
-            "State",
-            if collapsed { "collapsed" } else { "expanded" },
+        labeled_value_line("Type", "namespace", primary_style()),
+        labeled_value_line(
+            "Child Namespaces",
+            &child_namespace_count.to_string(),
+            value_style(),
         ),
-        detail_row(
-            "Channels",
-            &variable_count.to_string(),
-            "Direct",
-            &direct_channel_count.to_string(),
-        ),
-        detail_row("Children", &child_namespace_count.to_string(), "", ""),
-        labeled_value_line("Notes", "Namespace summary", value_style()),
+        labeled_value_line("Total Channels", &variable_count.to_string(), value_style()),
+        labeled_value_line("Description", "", value_style()),
     ]
 }
 
@@ -1725,8 +1726,10 @@ fn styled_value_span(label: &str, value: &str) -> Span<'static> {
         ),
         "Path" => Span::styled(value.to_string(), primary_style()),
         "Value" => Span::styled(value.to_string(), value_style()),
-        "Unit" | "Rate" | "Last Received" | "Updates" | "Channels" | "Direct" | "Children"
-        | "Samples" | "Notes" => Span::styled(value.to_string(), value_style()),
+        "Unit" | "Units" | "Rate" | "Last Received" | "Updates" | "Channels" | "Total Channels"
+        | "Direct" | "Children" | "Child Namespaces" | "Samples" | "Notes" | "Description" => {
+            Span::styled(value.to_string(), value_style())
+        }
         "State" => Span::styled(value.to_string(), value_style()),
         _ => Span::styled(value.to_string(), value_style()),
     }
