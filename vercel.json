@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npx --yes @bazel/bazelisk build --action_env=VERCEL_URL --action_env=DOCS_SITE_URL --action_env=DOCS_BASE_URL --action_env=DOCS_REPO_URL //website:site",
+  "buildCommand": "npx --yes @bazel/bazelisk build --ignore_dev_dependency --action_env=VERCEL_URL --action_env=DOCS_SITE_URL --action_env=DOCS_BASE_URL --action_env=DOCS_REPO_URL //website:site",
   "outputDirectory": "bazel-bin/website/site"
 }

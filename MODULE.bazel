@@ -8,7 +8,9 @@ bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_cc", version = "0.2.14")
 bazel_dep(name = "rules_rust", version = "0.67.0")
 bazel_dep(name = "rules_python", version = "1.8.4")
-bazel_dep(name = "aspect_rules_lint", version = "2.3.0")
+
+bazel_dep(name = "aspect_rules_lint", version = "2.3.0", dev_dependency = True)
+
 bazel_dep(name = "aspect_rules_js", version = "2.6.0")
 bazel_dep(name = "rules_nodejs", version = "6.5.2")
 bazel_dep(name = "toolchains_llvm", version = "1.6.0")
@@ -23,6 +25,7 @@ rust.toolchain(
     versions = ["1.85.0"],
 )
 use_repo(rust, "rust_toolchains")
+
 register_toolchains("@rust_toolchains//:all")
 
 # ==============================================================================
@@ -47,6 +50,7 @@ llvm.toolchain(
     llvm_version = "19.1.6",
 )
 use_repo(llvm, "llvm_toolchain")
+
 register_toolchains("@llvm_toolchain//:all")
 
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
@@ -64,7 +68,6 @@ use_repo(crate, "crates")
 node = use_extension(
     "@rules_nodejs//nodejs:extensions.bzl",
     "node",
-    dev_dependency = True,
 )
 node.toolchain(node_version = "20.13.1")
 
