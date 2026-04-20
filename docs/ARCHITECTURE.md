@@ -164,7 +164,7 @@ The current Rust and C++ example plugins send:
 ## Build System
 
 Bazel is the primary build system for the repository:
-- `MODULE.bazel` pins the Bazel module graph. It is also the authoritative repo version; the Cargo workspace version is synced from it
+- `MODULE.bazel` pins the Bazel module graph. It is also the authoritative repo version; the Cargo workspace package version is intentionally fixed at `0.0.0`
 - `rules_rust` provides the hermetic Rust toolchain
 - `rules_python` provides the hermetic Python runtime
 - `toolchains_llvm` provides the hermetic C++ toolchain used for the in-repo C++ plugin

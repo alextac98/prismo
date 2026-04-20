@@ -19,18 +19,15 @@ This project strictly follows [semantic versioning](https://semver.org/), summar
 
 Note: read the whole spec at https://semver.org/ for more details, especially about pre-release versions and build metadata.
 
-Version updates are anchored on `MODULE.bazel`, which acts as the single source of truth for the repo version. The `sync` tool propagates that version to the Cargo workspace for tooling compatibility.
+Version updates are anchored on `MODULE.bazel`, which acts as the single source of truth for the repo version. Cargo package versions are intentionally fixed at `0.0.0` because the Rust crates are maintained for in-repo development and IDE support rather than publication.
 
-When making a change that requires a version bump, update `MODULE.bazel` first, then run the sync tool and tests:
+When making a change that requires a version bump, update `MODULE.bazel`, then run the tests:
 
 ```bash
 $EDITOR MODULE.bazel
-bazel run //tools/version:sync
 bazel test //...
 ```
 
-`//tools/version:version_consistency_test` is included in `bazel test //...` and fails if the Cargo workspace version drifts away from `MODULE.bazel`.
-The sync tool runs under Bazel's hermetic Python toolchain rather than the host shell or system Python.
 After that change lands on `main`, GitHub Actions automatically creates a GitHub release tagged `v<version>` with generated release notes. The release job only runs when the `MODULE.bazel` version actually changed on that push.
 
 ## Local Workflow

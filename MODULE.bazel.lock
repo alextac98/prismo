@@ -1362,8 +1362,8 @@
         "bzlTransitiveDigest": "fMpXYJZzHgCE6abwx2xttA6y0NXHyDxGMH87R6ndJew=",
         "usagesDigest": "Ozpvgtax2BIOkocdTv/d/y1606O+XgiTbnWBHVdEQkI=",
         "recordedFileInputs": {
-          "@@//Cargo.lock": "922d51c8995eacf70560d1a919b3eb9d3761fd35219d00926086da04297ae411",
-          "@@//Cargo.toml": "8f65ec8e2feb2349870eeeea378ca2e8d81b6221938b38af6b3270389d4dbecc",
+          "@@//Cargo.lock": "2423959f947b3c43200acf427834876d1be17f8d0e7852f24bd77a89c926627d",
+          "@@//Cargo.toml": "dba0d90284261114e53d9ed6626b8bfc068426c40ea3a49e40c559644003b439",
           "@@//app/Cargo.toml": "a626cab819292d72cece5c9102fe44efe56d0f6a59a50b42434419c52a2f61ee",
           "@@//crates/core/Cargo.toml": "64e4af0de6087aed55bee3177c5d4a98ab6638c37462b4d49b6ec25dc7c669e8",
           "@@//crates/plugin-host/Cargo.toml": "22265ff0962e2b3eaef30e814709c258f12e346b7206ed8c98cdfa19c0106f14",

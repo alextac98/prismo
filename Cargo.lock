@@ -788,7 +788,7 @@ dependencies = [
 
 [[package]]
 name = "prismo"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -802,14 +802,14 @@ dependencies = [
 
 [[package]]
 name = "prismo-core"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "prismo-example-rust"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "prismo-plugin-sdk-rust",
@@ -819,14 +819,14 @@ dependencies = [
 
 [[package]]
 name = "prismo-ffi-tools"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "diplomat-tool",
 ]
 
 [[package]]
 name = "prismo-plugin-host"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "prismo-core",
@@ -838,7 +838,7 @@ dependencies = [
 
 [[package]]
 name = "prismo-plugin-protocol"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "prost",
@@ -849,7 +849,7 @@ dependencies = [
 
 [[package]]
 name = "prismo-plugin-sdk-cpp"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "diplomat",
@@ -860,7 +860,7 @@ dependencies = [
 
 [[package]]
 name = "prismo-plugin-sdk-rust"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "prismo-plugin-protocol",
@@ -870,7 +870,7 @@ dependencies = [
 
 [[package]]
 name = "prismo-tui"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "crossterm 0.29.0",
  "prismo-core",
