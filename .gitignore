@@ -7,3 +7,8 @@ bazel-*
 **/node_modules/
 **/.docusaurus/
 **/build/
+
+# Ignore Python files
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/

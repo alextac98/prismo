@@ -3,6 +3,7 @@ load("@aspect_rules_lint//format:defs.bzl", "format_multirun")
 exports_files([
     "Cargo.lock",
     "Cargo.toml",
+    "MODULE.bazel",
 ])
 
 format_multirun(

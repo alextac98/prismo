@@ -9,6 +9,30 @@ description: Local development workflow, extension points, and contributor notes
 
 The primary build system used by Prismo is Bazel, which provides a hermetic and reproducible build environment for both the Rust and C++ parts of the project. Cargo manifests are still present for the Rust crates to allow for IDE integration and because `rules_rust` uses them to understand the workspace dependency graph.
 
+## Versioning
+
+This project strictly follows [semantic versioning](https://semver.org/), summarized below:
+
+- MAJOR version when you make incompatible API changes
+- MINOR version when you add functionality in a backwards compatible manner
+- PATCH version when you make backwards compatible bug fixes
+
+Note: read the whole spec at https://semver.org/ for more details, especially about pre-release versions and build metadata.
+
+Version updates are anchored on `MODULE.bazel`, which acts as the single source of truth for the repo version. The `sync` tool propagates that version to the Cargo workspace for tooling compatibility.
+
+When making a change that requires a version bump, update `MODULE.bazel` first, then run the sync tool and tests:
+
+```bash
+$EDITOR MODULE.bazel
+bazel run //tools/version:sync
+bazel test //...
+```
+
+`//tools/version:version_consistency_test` is included in `bazel test //...` and fails if the Cargo workspace version drifts away from `MODULE.bazel`.
+The sync tool runs under Bazel's hermetic Python toolchain rather than the host shell or system Python.
+After that change lands on `main`, GitHub Actions automatically creates a GitHub release tagged `v<version>` with generated release notes. The release job only runs when the `MODULE.bazel` version actually changed on that push.
+
 ## Local Workflow
 
 The main in-repo development path is the Bazel example bundle:

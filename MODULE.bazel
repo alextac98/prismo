@@ -7,10 +7,15 @@ bazel_dep(name = "bazel_skylib", version = "1.8.2")
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_cc", version = "0.2.14")
 bazel_dep(name = "rules_rust", version = "0.67.0")
+bazel_dep(name = "rules_python", version = "1.8.4")
 bazel_dep(name = "aspect_rules_lint", version = "2.3.0")
 bazel_dep(name = "aspect_rules_js", version = "2.6.0")
 bazel_dep(name = "rules_nodejs", version = "6.5.2")
 bazel_dep(name = "toolchains_llvm", version = "1.6.0")
+
+# ==============================================================================
+# Rust Setup
+# ==============================================================================
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
@@ -19,6 +24,22 @@ rust.toolchain(
 )
 use_repo(rust, "rust_toolchains")
 register_toolchains("@rust_toolchains//:all")
+
+# ==============================================================================
+# Python Setup
+# ==============================================================================
+
+python = use_extension(
+    "@rules_python//python/extensions:python.bzl",
+    "python",
+    dev_dependency = True,
+)
+python.defaults(python_version = "3.12")
+python.toolchain(python_version = "3.12")
+
+# ==============================================================================
+# C++ Setup
+# ==============================================================================
 
 llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
 llvm.toolchain(
@@ -35,6 +56,10 @@ crate.from_cargo(
     manifests = ["//:Cargo.toml"],
 )
 use_repo(crate, "crates")
+
+# ==============================================================================
+# Typescript / Javascript Setup
+# ==============================================================================
 
 node = use_extension(
     "@rules_nodejs//nodejs:extensions.bzl",
