@@ -14,6 +14,7 @@ const repoUrl =
 const config: Config = {
   title: "Prismo",
   tagline: "An adaptable terminal telemetry viewer.",
+  favicon: "prismo-icon.png",
   future: {
     v4: {
       removeLegacyPostBuildHeadAttribute: false,
