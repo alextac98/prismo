@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   build_and_test:
+    name: Build and Test
     runs-on: ubuntu-latest
     steps:
       - name: Check Out
@@ -24,17 +25,20 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - name: Bazel Build
-        run: bazel build -- //... -//website:all
+      - name: Bazel Build All
+        run: bazel build //...
 
-      - name: Bazel Test
-        run: bazel test -- //... -//website:all
+      - name: Bazel Test All
+        run: bazel test //...
 
   release:
     name: Release
     needs: build_and_test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release_result.outputs.release_created }}
+      tag: ${{ steps.version.outputs.tag }}
     permissions:
       contents: write
     steps:
@@ -58,12 +62,25 @@ jobs:
         run: tools/release/check_existing_release.sh >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
+        id: create_release
         if: steps.version.outputs.version_changed == 'true' && steps.release.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: tools/release/create_github_release.sh
+
+      - name: Set Release Result
+        id: release_result
+        env:
+          VERSION_CHANGED: ${{ steps.version.outputs.version_changed }}
+          RELEASE_EXISTS: ${{ steps.release.outputs.exists || 'false' }}
+        run: |
+          if [[ "$VERSION_CHANGED" == "true" && "$RELEASE_EXISTS" != "true" ]]; then
+            echo "release_created=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_created=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Release Summary
         env:
@@ -72,3 +89,18 @@ jobs:
           VERSION_CHANGED: ${{ steps.version.outputs.version_changed }}
           RELEASE_EXISTS: ${{ steps.release.outputs.exists || 'false' }}
         run: tools/release/write_release_summary.sh >> "$GITHUB_STEP_SUMMARY"
+
+  publish_bcr:
+    name: Publish to Bazel Central Registry
+    needs: release
+    if: needs.release.outputs.release_created == 'true'
+    permissions:
+      contents: write
+    uses: bazel-contrib/publish-to-bcr/.github/workflows/publish.yaml@v1.2.0
+    with:
+      tag_name: ${{ needs.release.outputs.tag }}
+      registry_fork: ${{ github.repository_owner }}/bazel-central-registry
+      attest: false
+      environment: PUBLISH
+    secrets:
+      publish_token: ${{ secrets.BCR_PUBLISH_TOKEN }}
