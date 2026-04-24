@@ -950,7 +950,7 @@
     "@@rules_nodejs+//nodejs:extensions.bzl%node": {
       "general": {
         "bzlTransitiveDigest": "FmfMiNXAxRoLWw3NloQbssosE1egrSvzirbQnso7j7E=",
-        "usagesDigest": "YcWZe5Qwfo6rwhwPcUmp8YHrNgWRTUMbhkywgdvcA5w=",
+        "usagesDigest": "qvDZhRgY2qXOA7t/rwbvfnizLQ0GzZE8x3lqa7CqfSE=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -1360,7 +1360,7 @@
     "@@rules_rust+//crate_universe:extensions.bzl%crate": {
       "general": {
         "bzlTransitiveDigest": "fMpXYJZzHgCE6abwx2xttA6y0NXHyDxGMH87R6ndJew=",
-        "usagesDigest": "Ozpvgtax2BIOkocdTv/d/y1606O+XgiTbnWBHVdEQkI=",
+        "usagesDigest": "Ie2eUFzptaYI2Qo20KWapw/9YCQaI6HmWIpusdc/Rk4=",
         "recordedFileInputs": {
           "@@//Cargo.lock": "2423959f947b3c43200acf427834876d1be17f8d0e7852f24bd77a89c926627d",
           "@@//Cargo.toml": "dba0d90284261114e53d9ed6626b8bfc068426c40ea3a49e40c559644003b439",

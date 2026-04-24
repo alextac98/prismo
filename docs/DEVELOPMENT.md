@@ -30,7 +30,7 @@ bazel test //...
 
 After that change lands on `main`, GitHub Actions automatically creates a GitHub release tagged `v<version>` with generated release notes. The release job only runs when the `MODULE.bazel` version actually changed on that push.
 
-When a new GitHub release is created, CI also publishes the Bazel module to the Bazel Central Registry by opening a PR against `bazelbuild/bazel-central-registry`. The workflow expects a fork at `alextac98/bazel-central-registry` and a repository or organization GitHub Actions secret named `BCR_PUBLISH_TOKEN` that can push to that fork and open the upstream PR. 
+When a new GitHub release is created, CI also uploads a versioned source archive asset named `prismo-v<version>.tar.gz` and then publishes the Bazel module to the Bazel Central Registry by opening a PR against `bazelbuild/bazel-central-registry`. The BCR entry intentionally points at that release asset rather than GitHub's generated tag archive so the checksum remains stable. The workflow expects a fork at `alextac98/bazel-central-registry` and a repository or organization GitHub Actions secret named `BCR_PUBLISH_TOKEN` that can push to that fork and open the upstream PR.
 
 ## Local Workflow
 
