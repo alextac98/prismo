@@ -1,3 +1,5 @@
+load("@npm//website:prettier/package_json.bzl", prettier_bin = "bin")
+
 config_setting(
     name = "host_linux_aarch64",
     constraint_values = [
@@ -47,5 +49,22 @@ sh_binary(
         ":host_macos_x86_64": ["@@rules_rs++toolchains+rustfmt_macos_x86_64_1_85_0//:rustfmt_bin"],
         "//conditions:default": ["@@rules_rs++toolchains+rustfmt_macos_aarch64_1_85_0//:rustfmt_bin"],
     }),
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "buildifier",
+    actual = "@buildifier_prebuilt//:buildifier",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "clang_format",
+    actual = "@llvm//:clang-format",
+    visibility = ["//visibility:public"],
+)
+
+prettier_bin.prettier_binary(
+    name = "prettier",
     visibility = ["//visibility:public"],
 )
