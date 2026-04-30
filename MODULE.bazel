@@ -27,7 +27,10 @@ rust.toolchain(
 )
 use_repo(rust, "default_rust_toolchains")
 
-register_toolchains("@default_rust_toolchains//:all")
+register_toolchains(
+    "@default_rust_toolchains//:all",
+    dev_dependency = True,
+)
 
 # ==============================================================================
 # Python Setup
@@ -47,12 +50,15 @@ python.toolchain(python_version = "3.12")
 
 llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
 llvm.toolchain(
-    name = "llvm_toolchain",
+    name = "llvm",
     llvm_version = "19.1.6",
 )
-use_repo(llvm, "llvm_toolchain")
+use_repo(llvm, "llvm")
 
-register_toolchains("@llvm_toolchain//:all")
+register_toolchains(
+    "@llvm//:all",
+    dev_dependency = True,
+)
 
 crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 crate.from_cargo(
