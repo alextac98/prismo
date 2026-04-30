@@ -165,10 +165,9 @@ The current Rust and C++ example plugins send:
 
 Bazel is the primary build system for the repository:
 - `MODULE.bazel` pins the Bazel module graph. It is also the authoritative repo version; the Cargo workspace package version is intentionally fixed at `0.0.0`
-- `rules_rust` provides the hermetic Rust toolchain
+- `rules_rs` provides the Rust-facing Bazel surface in this repo, including toolchains and Cargo dependency resolution
 - `rules_python` provides the hermetic Python runtime
 - `toolchains_llvm` provides the hermetic C++ toolchain used for the in-repo C++ plugin
-- `crate_universe` reads the Cargo workspace metadata and resolves external Rust crates for Bazel
 - `bazel/defs.bzl` exposes Prismo-specific packaging rules for downstream Bazel users
 - each workspace package has its own `BUILD.bazel`
 - plugin manifests are checked into plugin directories. 1st party supported plugins live in the `plugins/` directory

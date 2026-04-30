@@ -3,11 +3,11 @@ module(
     version = "0.1.1",
 )
 
-bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "rules_cc", version = "0.2.14")
-bazel_dep(name = "rules_rust", version = "0.67.0")
+bazel_dep(name = "rules_cc", version = "0.2.18")
 bazel_dep(name = "rules_python", version = "1.8.4")
+bazel_dep(name = "rules_rs", version = "0.0.68")
 
 bazel_dep(name = "aspect_rules_lint", version = "2.3.0", dev_dependency = True)
 
@@ -19,14 +19,15 @@ bazel_dep(name = "toolchains_llvm", version = "1.6.0")
 # Rust Setup
 # ==============================================================================
 
-rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
 rust.toolchain(
+    name = "default_rust_toolchains",
     edition = "2024",
-    versions = ["1.85.0"],
+    version = "1.85.0",
 )
-use_repo(rust, "rust_toolchains")
+use_repo(rust, "default_rust_toolchains")
 
-register_toolchains("@rust_toolchains//:all")
+register_toolchains("@default_rust_toolchains//:all")
 
 # ==============================================================================
 # Python Setup
@@ -53,13 +54,18 @@ use_repo(llvm, "llvm_toolchain")
 
 register_toolchains("@llvm_toolchain//:all")
 
-crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 crate.from_cargo(
-    name = "crates",
-    cargo_lockfile = "//:Cargo.lock",
-    manifests = ["//:Cargo.toml"],
+    name = "prismo_crates",
+    cargo_lock = "//:Cargo.lock",
+    cargo_toml = "//:Cargo.toml",
+    platform_triples = [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-gnu",
+    ],
 )
-use_repo(crate, "crates")
+use_repo(crate, "prismo_crates")
 
 # ==============================================================================
 # Typescript / Javascript Setup

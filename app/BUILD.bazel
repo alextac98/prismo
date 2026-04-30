@@ -1,12 +1,12 @@
-load("@crates//:defs.bzl", "all_crate_deps")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@prismo_crates//:defs.bzl", "all_crate_deps")
+load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("//bazel:defs.bzl", "prismo_bundle")
 
 rust_binary(
     name = "prismo",
     srcs = glob(["src/**/*.rs"]),
     edition = "2024",
-    deps = all_crate_deps(normal = True) + [
+    deps = all_crate_deps(normal = True, cargo_only = True) + [
         "//crates/core:core",
         "//crates/plugin-host:plugin_host",
         "//crates/tui:tui",
