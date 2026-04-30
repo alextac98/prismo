@@ -42,6 +42,9 @@ devDependencies:
   '@docusaurus/types':
     specifier: ^3.10.0
     version: 3.10.0(react-dom@19.2.0)(react@19.2.0)
+  prettier:
+    specifier: ^3.8.3
+    version: 3.8.3
   typescript:
     specifier: ~5.6.3
     version: 5.6.3
@@ -8544,6 +8547,12 @@ packages:
       picocolors: 1.1.1
       source-map-js: 1.2.1
     dev: false
+
+  /prettier@3.8.3:
+    resolution: {integrity: sha512-7igPTM53cGHMW8xWuVTydi2KO233VFiTNyF5hLJqpilHfmn8C8gPf+PS7dUT64YcXFbiMGZxS9pCSxL/Dxm/Jw==}
+    engines: {node: '>=14'}
+    hasBin: true
+    dev: true
 
   /pretty-error@4.0.0:
     resolution: {integrity: sha512-AoJ5YMAcXKYxKhuJGdcvse+Voc6v1RgnsR3nWcYU7q4t6z0Q6T86sv5Zq8VIRbOWWFpvdGE83LtdSMNd+6Y0xw==}

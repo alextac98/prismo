@@ -8,7 +8,16 @@ exports_files([
 
 format_multirun(
     name = "format",
+    c = "//tools/format:clang_format",
+    cc = "//tools/format:clang_format",
+    css = "//tools/format:prettier",
+    html = "//tools/format:prettier",
+    javascript = "//tools/format:prettier",
+    markdown = "//tools/format:prettier",
     rust = "//tools/format:rustfmt",
+    shell = "@aspect_rules_lint//format:shfmt",
+    starlark = "//tools/format:buildifier",
+    yaml = "@aspect_rules_lint//format:yamlfmt",
     rust_check_args = [
         "--edition",
         "2024",
