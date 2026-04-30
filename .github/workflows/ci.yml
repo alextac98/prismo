@@ -105,6 +105,6 @@ jobs:
       tag_name: ${{ needs.release.outputs.tag }}
       registry_fork: ${{ github.repository_owner }}/bazel-central-registry
       attest: false
-      environment: PUBLISH
+      environment: Publish
     secrets:
       publish_token: ${{ secrets.BCR_PUBLISH_TOKEN }}

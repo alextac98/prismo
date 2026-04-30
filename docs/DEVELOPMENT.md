@@ -7,7 +7,7 @@ description: Local development workflow, extension points, and contributor notes
 
 # Development
 
-The primary build system used by Prismo is Bazel, which provides a hermetic and reproducible build environment for both the Rust and C++ parts of the project. Cargo manifests are still present for the Rust crates to allow for IDE integration and because `rules_rust` uses them to understand the workspace dependency graph.
+The primary build system used by Prismo is Bazel, which provides a hermetic and reproducible build environment for both the Rust and C++ parts of the project. Cargo manifests are still present for the Rust crates to allow for IDE integration and because Bazel's Rust dependency resolution reads the Cargo workspace graph from `Cargo.toml` and `Cargo.lock`.
 
 ## Versioning
 

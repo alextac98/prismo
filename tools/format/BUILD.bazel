@@ -1,5 +1,51 @@
-alias(
+config_setting(
+    name = "host_linux_aarch64",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:linux",
+    ],
+)
+
+config_setting(
+    name = "host_linux_x86_64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+)
+
+config_setting(
+    name = "host_macos_aarch64",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:macos",
+    ],
+)
+
+config_setting(
+    name = "host_macos_x86_64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:macos",
+    ],
+)
+
+sh_binary(
     name = "rustfmt",
-    actual = "@rules_rust//tools/upstream_wrapper:rustfmt",
+    srcs = ["rustfmt.sh"],
+    args = select({
+        ":host_linux_aarch64": ["$(rootpath @@rules_rs++toolchains+rustfmt_linux_aarch64_1_85_0//:rustfmt_bin)"],
+        ":host_linux_x86_64": ["$(rootpath @@rules_rs++toolchains+rustfmt_linux_x86_64_1_85_0//:rustfmt_bin)"],
+        ":host_macos_aarch64": ["$(rootpath @@rules_rs++toolchains+rustfmt_macos_aarch64_1_85_0//:rustfmt_bin)"],
+        ":host_macos_x86_64": ["$(rootpath @@rules_rs++toolchains+rustfmt_macos_x86_64_1_85_0//:rustfmt_bin)"],
+        "//conditions:default": ["$(rootpath @@rules_rs++toolchains+rustfmt_macos_aarch64_1_85_0//:rustfmt_bin)"],
+    }),
+    data = select({
+        ":host_linux_aarch64": ["@@rules_rs++toolchains+rustfmt_linux_aarch64_1_85_0//:rustfmt_bin"],
+        ":host_linux_x86_64": ["@@rules_rs++toolchains+rustfmt_linux_x86_64_1_85_0//:rustfmt_bin"],
+        ":host_macos_aarch64": ["@@rules_rs++toolchains+rustfmt_macos_aarch64_1_85_0//:rustfmt_bin"],
+        ":host_macos_x86_64": ["@@rules_rs++toolchains+rustfmt_macos_x86_64_1_85_0//:rustfmt_bin"],
+        "//conditions:default": ["@@rules_rs++toolchains+rustfmt_macos_aarch64_1_85_0//:rustfmt_bin"],
+    }),
     visibility = ["//visibility:public"],
 )
