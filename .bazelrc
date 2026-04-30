@@ -1,4 +1,7 @@
+common --enable_platform_specific_config
 build --incompatible_strict_action_env
 build --jobs=auto
+common:linux --host_platform=//platforms:local_gnu
+common:windows --host_platform=//platforms:local_windows_msvc
 
 test --test_output=errors
