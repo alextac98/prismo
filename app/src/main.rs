@@ -4,18 +4,18 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use base64::Engine;
 use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use prismo_core::{RuntimeEvent, TelemetryStore};
 use prismo_plugin_host::PluginHost;
-use prismo_tui::{FocusPane, UiAction, UiState, selected_text};
-use ratatui::Terminal;
+use prismo_tui::{selected_text, FocusPane, UiAction, UiState};
 use ratatui::backend::CrosstermBackend;
+use ratatui::Terminal;
 use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<()> {
@@ -92,7 +92,7 @@ fn run_app(
                 Event::Key(key) if key.kind == KeyEventKind::Press => match ui.on_key(key) {
                     UiAction::Quit => break,
                     UiAction::RunCommand(command) => match command.as_str() {
-                        "q" | "quit" => break,
+                        "q" | "Q" | "quit" => break,
                         _ => ui.set_status_notice(format!("unknown command: :{}", command)),
                     },
                     UiAction::YankSelectedValue => {
