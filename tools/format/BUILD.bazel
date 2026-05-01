@@ -58,9 +58,23 @@ alias(
     visibility = ["//visibility:public"],
 )
 
-alias(
+sh_binary(
     name = "clang_format",
-    actual = "@llvm//:clang-format",
+    srcs = ["clang_format.sh"],
+    args = select({
+        ":host_linux_aarch64": ["$(rootpath @clang_format_linux_aarch64//:clang_format/data/bin/clang-format)"],
+        ":host_linux_x86_64": ["$(rootpath @clang_format_linux_x86_64//:clang_format/data/bin/clang-format)"],
+        ":host_macos_aarch64": ["$(rootpath @clang_format_macos_aarch64//:clang_format/data/bin/clang-format)"],
+        ":host_macos_x86_64": ["$(rootpath @clang_format_macos_x86_64//:clang_format/data/bin/clang-format)"],
+        "//conditions:default": ["$(rootpath @clang_format_macos_aarch64//:clang_format/data/bin/clang-format)"],
+    }),
+    data = select({
+        ":host_linux_aarch64": ["@clang_format_linux_aarch64//:clang_format/data/bin/clang-format"],
+        ":host_linux_x86_64": ["@clang_format_linux_x86_64//:clang_format/data/bin/clang-format"],
+        ":host_macos_aarch64": ["@clang_format_macos_aarch64//:clang_format/data/bin/clang-format"],
+        ":host_macos_x86_64": ["@clang_format_macos_x86_64//:clang_format/data/bin/clang-format"],
+        "//conditions:default": ["@clang_format_macos_aarch64//:clang_format/data/bin/clang-format"],
+    }),
     visibility = ["//visibility:public"],
 )
 
