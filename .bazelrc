@@ -2,6 +2,7 @@ common --enable_platform_specific_config
 build --incompatible_strict_action_env
 build --jobs=auto
 common:linux --host_platform=@rules_rs//:local_gnu_platform
+common:linux --@llvm//config:experimental_stub_libgcc_s=True
 common:windows --host_platform=//platforms:local_windows_msvc
 
 test --test_output=errors
