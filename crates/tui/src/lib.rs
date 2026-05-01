@@ -1,5 +1,5 @@
 use std::cmp;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
@@ -10,11 +10,12 @@ use ratatui::symbols;
 use ratatui::text::Span;
 use ratatui::widgets::{
     Axis, Block, Borders, Chart, Clear, Dataset, GraphType, List, ListItem, ListState, Paragraph,
-    Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap,
+    Scrollbar, ScrollbarOrientation, ScrollbarState, Tabs, Wrap,
 };
 
 const MIN_TERMINAL_WIDTH: u16 = 80;
 const MIN_TERMINAL_HEIGHT: u16 = 20;
+const PRISMO_VERSION: &str = env!("PRISMO_VERSION");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FocusPane {
@@ -78,6 +79,7 @@ pub struct UiState {
     pub filter_input: String,
     pub status_notice: Option<StatusNotice>,
     channel_area: Option<Rect>,
+    plugin_tab_hitboxes: Vec<PluginTabHitbox>,
     details_area: Option<Rect>,
     latest_area: Option<Rect>,
     rendered_channels: usize,
@@ -85,6 +87,7 @@ pub struct UiState {
     channel_view_rows: usize,
     details_scroll_offset: usize,
     latest_scroll_offset: usize,
+    selected_plugin: usize,
     details_cursor: TextCursor,
     latest_cursor: TextCursor,
     collapsed_namespaces: HashSet<String>,
@@ -105,6 +108,12 @@ struct PaneContent {
     detail_lines: Vec<SelectableLine>,
     latest_title: String,
     latest_content: LatestPaneContent,
+}
+
+#[derive(Clone, Debug)]
+struct PluginTabHitbox {
+    index: usize,
+    area: Rect,
 }
 
 enum LatestPaneContent {
@@ -184,6 +193,7 @@ impl UiState {
             filter_input: String::new(),
             status_notice: None,
             channel_area: None,
+            plugin_tab_hitboxes: Vec::new(),
             details_area: None,
             latest_area: None,
             rendered_channels: 0,
@@ -191,6 +201,7 @@ impl UiState {
             channel_view_rows: 0,
             details_scroll_offset: 0,
             latest_scroll_offset: 0,
+            selected_plugin: 0,
             details_cursor: TextCursor::default(),
             latest_cursor: TextCursor::default(),
             collapsed_namespaces: HashSet::new(),
@@ -359,13 +370,17 @@ impl UiState {
                 UiAction::None
             }
             KeyCode::Left | KeyCode::Char('h') => {
-                if let Some(cursor) = self.focused_text_cursor_mut() {
+                if self.focus == FocusPane::Channels {
+                    self.select_previous_plugin();
+                } else if let Some(cursor) = self.focused_text_cursor_mut() {
                     cursor.move_left();
                 }
                 UiAction::None
             }
             KeyCode::Right | KeyCode::Char('l') => {
-                if let Some(cursor) = self.focused_text_cursor_mut() {
+                if self.focus == FocusPane::Channels {
+                    self.select_next_plugin();
+                } else if let Some(cursor) = self.focused_text_cursor_mut() {
                     cursor.move_right();
                 }
                 UiAction::None
@@ -426,20 +441,20 @@ impl UiState {
         })
     }
 
-    pub fn focus_label(&self) -> &'static str {
-        match self.focus {
-            FocusPane::Details => "details",
-            FocusPane::LatestValue => "latest",
-            FocusPane::Channels => "channels",
-        }
-    }
-
     pub fn on_mouse(&mut self, event: MouseEvent) {
         let column = event.column;
         let row = event.row;
         match event.kind {
             MouseEventKind::Down(MouseButton::Left) => {
-                if let Some(area) = self
+                if let Some(hitbox) = self
+                    .plugin_tab_hitboxes
+                    .iter()
+                    .find(|hitbox| rect_contains(hitbox.area, column, row))
+                    .cloned()
+                {
+                    self.select_plugin(hitbox.index);
+                    self.focus = FocusPane::Channels;
+                } else if let Some(area) = self
                     .channel_area
                     .filter(|area| rect_contains(*area, column, row))
                 {
@@ -507,6 +522,30 @@ impl UiState {
         self.clamp_selection(self.rendered_channels);
     }
 
+    pub fn set_plugin_tabs(&mut self, area: Rect, plugin_ids: &[String]) {
+        self.plugin_tab_hitboxes.clear();
+        if area.height == 0 {
+            return;
+        }
+
+        let mut x = area.x;
+        for (index, plugin_id) in plugin_ids.iter().enumerate() {
+            if x >= area.right() {
+                break;
+            }
+
+            let width = (plugin_id.chars().count() as u16).min(area.right().saturating_sub(x));
+            if width > 0 {
+                self.plugin_tab_hitboxes.push(PluginTabHitbox {
+                    index,
+                    area: Rect::new(x, area.y, width, area.height),
+                });
+            }
+
+            x = x.saturating_add(width).saturating_add(1);
+        }
+    }
+
     pub fn set_details_area(&mut self, area: Rect) {
         self.details_area = Some(area);
     }
@@ -517,6 +556,7 @@ impl UiState {
 
     pub fn clear_scroll_areas(&mut self) {
         self.channel_area = None;
+        self.plugin_tab_hitboxes.clear();
         self.details_area = None;
         self.latest_area = None;
         self.channel_view_rows = 0;
@@ -547,26 +587,59 @@ impl UiState {
         }
     }
 
+    fn select_previous_plugin(&mut self) {
+        if self.selected_plugin > 0 {
+            self.selected_plugin -= 1;
+            self.selected = 0;
+            self.channel_scroll_offset = 0;
+        }
+    }
+
+    fn select_next_plugin(&mut self) {
+        self.selected_plugin = self.selected_plugin.saturating_add(1);
+        self.selected = 0;
+        self.channel_scroll_offset = 0;
+    }
+
+    fn select_plugin(&mut self, index: usize) {
+        if self.selected_plugin != index {
+            self.selected_plugin = index;
+            self.selected = 0;
+            self.channel_scroll_offset = 0;
+        }
+    }
+
+    fn clamp_selected_plugin(&mut self, plugin_count: usize) {
+        if plugin_count == 0 {
+            self.selected_plugin = 0;
+        } else {
+            self.selected_plugin = self.selected_plugin.min(plugin_count - 1);
+        }
+    }
+
     fn filtered_channels<'a>(&self, snapshot: &'a StoreSnapshot) -> Vec<&'a ChannelSnapshot> {
         let needle = self.filter_input.trim().to_ascii_lowercase();
+        let plugin_ids = plugin_ids(snapshot);
+        let selected_plugin = plugin_ids.get(self.selected_plugin).map(String::as_str);
         snapshot
             .channels
             .iter()
             .filter(|channel| {
-                if needle.is_empty() {
-                    true
-                } else {
-                    channel
+                if selected_plugin.is_some_and(|plugin_id| channel.plugin_id != plugin_id) {
+                    return false;
+                }
+
+                needle.is_empty()
+                    || channel
                         .descriptor
                         .path
                         .to_ascii_lowercase()
                         .contains(&needle)
-                        || channel
-                            .descriptor
-                            .description
-                            .to_ascii_lowercase()
-                            .contains(&needle)
-                }
+                    || channel
+                        .descriptor
+                        .description
+                        .to_ascii_lowercase()
+                        .contains(&needle)
             })
             .collect()
     }
@@ -643,34 +716,31 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
         return;
     }
 
+    let root = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(frame.area());
+    let main_area = root[0];
+    let status_area = root[1];
+
     let vertical = frame.area().width < 110;
-    let (detail_area, channel_area, status_area) = if vertical {
+    let (detail_area, channel_area) = if vertical {
         let root = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(60),
-                Constraint::Percentage(40),
-                Constraint::Length(1),
-            ])
-            .split(frame.area());
-        (root[0], root[1], root[2])
+            .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+            .split(main_area);
+        (root[0], root[1])
     } else {
         let columns = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
-            .split(frame.area());
-        (
-            columns[0],
-            columns[1],
-            Rect::new(
-                frame.area().x,
-                frame.area().bottom().saturating_sub(1),
-                frame.area().width,
-                1,
-            ),
-        )
+            .split(main_area);
+        (columns[0], columns[1])
     };
 
+    let plugin_ids = plugin_ids(snapshot);
+    ui.clamp_selected_plugin(plugin_ids.len());
+    let selected_plugin_id = plugin_ids.get(ui.selected_plugin).map(String::as_str);
     let rows = ui.tree_rows(snapshot);
     ui.clamp_selection(rows.len());
 
@@ -692,10 +762,64 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
         .borders(Borders::ALL)
         .border_style(focus_style(ui.focus == FocusPane::Channels));
     let channel_inner = list_block.inner(channel_area);
-    let (channel_list_area, channel_scrollbar_area) =
-        split_scrollable_area(channel_inner, rows.len());
-    ui.set_channel_area(channel_inner);
+    let stats_height = u16::from(channel_inner.height > 0);
+    let tab_height = u16::from(plugin_ids.len() > 1 && channel_inner.height > stats_height);
+    let channel_sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(tab_height),
+            Constraint::Min(0),
+            Constraint::Length(stats_height),
+        ])
+        .split(channel_inner);
+    let tab_area = channel_sections[0];
+    let list_area = channel_sections[1];
+    let stats_area = channel_sections[2];
+    let plugin_stats = if let Some(plugin_id) = selected_plugin_id {
+        if let Some(plugin) = snapshot
+            .plugins
+            .iter()
+            .find(|plugin| plugin.plugin_id == plugin_id)
+        {
+            format!(
+                "updates:{} dropped:{} channels:{}",
+                plugin.health.emitted_updates,
+                plugin.health.dropped_updates,
+                rows.len()
+            )
+        } else {
+            format!("starting channels:{}", rows.len())
+        }
+    } else {
+        "plugins: starting".to_string()
+    };
+    let (channel_list_area, channel_scrollbar_area) = split_scrollable_area(list_area, rows.len());
+    ui.set_channel_area(channel_list_area);
+    ui.set_plugin_tabs(tab_area, &plugin_ids);
     frame.render_widget(list_block, channel_area);
+    if plugin_ids.len() > 1 && tab_area.height > 0 {
+        let tabs = Tabs::new(
+            plugin_ids
+                .iter()
+                .cloned()
+                .map(Line::from)
+                .collect::<Vec<_>>(),
+        )
+        .select(ui.selected_plugin)
+        .style(Style::default().fg(Color::Gray))
+        .highlight_style(
+            Style::default()
+                .fg(Color::LightCyan)
+                .add_modifier(Modifier::BOLD),
+        );
+        frame.render_widget(tabs, tab_area);
+    }
+    if stats_area.height > 0 {
+        frame.render_widget(
+            Paragraph::new(format!("Stats: {plugin_stats}")).alignment(Alignment::Left),
+            stats_area,
+        );
+    }
     let channel_list = List::new(items)
         .highlight_style(
             Style::default()
@@ -719,61 +843,41 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
     } else {
         ui.set_details_area(Rect::default());
         ui.set_latest_area(Rect::default());
-        let empty = Paragraph::new("No channels match the current filter.")
+        let empty_message = if plugin_ids.is_empty() {
+            "No channels are registered yet.".to_string()
+        } else if ui.filter_input.is_empty() {
+            format!(
+                "No channels registered for {}.",
+                plugin_ids
+                    .get(ui.selected_plugin)
+                    .map(String::as_str)
+                    .unwrap_or("this plugin")
+            )
+        } else {
+            "No channels match the current filter.".to_string()
+        };
+        let empty = Paragraph::new(empty_message)
             .block(Block::default().title("Selection").borders(Borders::ALL))
             .alignment(Alignment::Center);
         frame.render_widget(empty, detail_area);
         None
     };
 
-    let plugin_summary = snapshot
-        .plugins
-        .iter()
-        .map(|plugin| {
-            let health = format!(
-                "u:{} d:{}",
-                plugin.health.emitted_updates, plugin.health.dropped_updates
-            );
-            match &plugin.message {
-                Some(message) => format!(
-                    "{}:{} r{} {} {}",
-                    plugin.plugin_id, plugin.state, plugin.restart_count, health, message
-                ),
-                None => format!(
-                    "{}:{} r{} {}",
-                    plugin.plugin_id, plugin.state, plugin.restart_count, health
-                ),
-            }
-        })
-        .collect::<Vec<_>>();
-    let plugin_summary = if plugin_summary.is_empty() {
-        "plugins: starting".to_string()
-    } else {
-        plugin_summary.join(" | ")
-    };
-
     let status_left = if let Some(notice) = ui.status_notice() {
-        format!(
-            ":q quit  : command  ? help  focus:{}  {}",
-            ui.focus_label(),
-            notice
-        )
+        format!(":q/:Q quit  : command  ? help  {notice}")
     } else {
-        format!(":q quit  : command  ? help  focus:{}", ui.focus_label())
+        " :q quit | : command | ? help |".to_string()
     };
-    let status_right = format!(
-        "total:{} dropped:{}  {}",
-        snapshot.total_updates, snapshot.dropped_updates, plugin_summary
-    );
-    let right_width = status_right.len().min(status_area.width as usize) as u16;
-    let status_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(0), Constraint::Length(right_width)])
-        .split(status_area);
 
     let status_style = Style::default().fg(Color::Black).bg(Color::Gray);
+    let version = format!("Prismo v{PRISMO_VERSION} ");
+    let version_width = version.len().min(status_area.width as usize) as u16;
+    let status_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(0), Constraint::Length(version_width)])
+        .split(status_area);
     let left = Paragraph::new(status_left).style(status_style);
-    let right = Paragraph::new(status_right)
+    let right = Paragraph::new(version)
         .style(status_style)
         .alignment(Alignment::Right);
     frame.render_widget(left, status_chunks[0]);
@@ -816,6 +920,7 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
             Line::from(
                 "j/k move selection in Channels, or move cursor up/down in focused text panes",
             ),
+            Line::from("h/l or Left/Right switch plugin tabs when Channels is focused"),
             Line::from("h/l or Left/Right move cursor horizontally in focused text panes"),
             Line::from("g/G jump to the first or last visible row"),
             Line::from("Enter collapse or expand the selected namespace in Channels"),
@@ -827,7 +932,7 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
             ),
             Line::from("/ open channel filter"),
             Line::from(": open command mode"),
-            Line::from(":q quit prismo"),
+            Line::from(":q or :Q quit prismo"),
             Line::from("Mouse click select a row in the Channels pane"),
             Line::from("Esc close filter, command, or help"),
             Line::from("? toggle this help"),
@@ -931,14 +1036,10 @@ fn render_latest_value(
                     .style(Style::default().fg(Color::LightCyan))
                     .data(points);
                 let chart = Chart::new(vec![dataset])
-                    .x_axis(
-                        Axis::default()
-                            .bounds([*min_x, *max_x])
-                            .labels([
-                                Line::from(x_labels[0].clone()),
-                                Line::from(x_labels[1].clone()),
-                            ]),
-                    )
+                    .x_axis(Axis::default().bounds([*min_x, *max_x]).labels([
+                        Line::from(x_labels[0].clone()),
+                        Line::from(x_labels[1].clone()),
+                    ]))
                     .y_axis(Axis::default().bounds([*min_y, *max_y]).labels([
                         Line::from(format!("{min_y:.1}")),
                         Line::from(format!("{max_y:.1}")),
@@ -1199,7 +1300,7 @@ fn build_tree_rows<'a>(
     let mut root = NamespaceNode::default();
 
     for channel in channels {
-        let tree_path = channel_tree_path(channel);
+        let tree_path = channel_display_path(channel);
         let parts = tree_path.split('.').collect::<Vec<_>>();
 
         if parts.len() <= 1 {
@@ -1231,7 +1332,7 @@ fn visible_namespace_paths(channels: Vec<&ChannelSnapshot>) -> HashSet<String> {
     let mut paths = HashSet::new();
     for channel in channels {
         let mut current = String::new();
-        let tree_path = channel_tree_path(channel);
+        let tree_path = channel_display_path(channel);
         let parts = tree_path.split('.').collect::<Vec<_>>();
         for part in &parts[..parts.len().saturating_sub(1)] {
             if !current.is_empty() {
@@ -1252,7 +1353,7 @@ fn append_tree_rows<'a>(
 ) {
     for namespace in node.namespaces.values() {
         let mut descendant_channels = collect_descendant_channels(namespace);
-        descendant_channels.sort_by_key(|channel| channel_tree_path(channel));
+        descendant_channels.sort_by_key(|channel| channel_display_path(channel));
         let collapsed = collapsed_namespaces.contains(&namespace.path);
         rows.push(TreeRow {
             depth,
@@ -1558,11 +1659,11 @@ fn build_namespace_variable_lines(
     }
 
     let mut sorted = channels.to_vec();
-    sorted.sort_by_key(|channel| channel_tree_path(channel));
+    sorted.sort_by_key(|channel| channel_display_path(channel));
     sorted
         .into_iter()
         .map(|channel| {
-            let relative = relative_channel_path(path, &channel_tree_path(channel));
+            let relative = relative_channel_path(path, &channel_display_path(channel));
             let marker = if channel.is_stale { "stale" } else { "live" };
             let value = channel
                 .latest
@@ -1624,6 +1725,27 @@ fn row_matches_key(row: &TreeRow<'_>, key: &RowKey) -> bool {
 
 fn channel_tree_path(channel: &ChannelSnapshot) -> String {
     format!("{}.{}", channel.plugin_id, channel.descriptor.path)
+}
+
+fn channel_display_path(channel: &ChannelSnapshot) -> String {
+    channel.descriptor.path.clone()
+}
+
+fn plugin_ids(snapshot: &StoreSnapshot) -> Vec<String> {
+    let mut plugin_ids = BTreeSet::new();
+    plugin_ids.extend(
+        snapshot
+            .plugins
+            .iter()
+            .map(|plugin| plugin.plugin_id.clone()),
+    );
+    plugin_ids.extend(
+        snapshot
+            .channels
+            .iter()
+            .map(|channel| channel.plugin_id.clone()),
+    );
+    plugin_ids.into_iter().collect()
 }
 
 fn ancestor_namespace_keys(key: &RowKey) -> Vec<RowKey> {
@@ -1816,7 +1938,11 @@ fn current_unix_timestamp_ns() -> u64 {
         .unwrap_or_default()
 }
 
-fn format_chart_edge_label(label: &str, timestamp_unix_ns: u64, end_timestamp_unix_ns: u64) -> String {
+fn format_chart_edge_label(
+    label: &str,
+    timestamp_unix_ns: u64,
+    end_timestamp_unix_ns: u64,
+) -> String {
     if label == "now" {
         return "now".to_string();
     }
@@ -1857,8 +1983,10 @@ fn history_bounds(history: &[NumericPoint]) -> (f64, f64) {
 mod tests {
     use std::time::Instant;
 
-    use super::{LatestPaneContent, build_channel_latest_content, format_chart_edge_label};
-    use prismo_core::{ChannelDescriptor, ChannelSample, ChannelSnapshot, ChannelValue, NumericPoint};
+    use super::{build_channel_latest_content, format_chart_edge_label, LatestPaneContent};
+    use prismo_core::{
+        ChannelDescriptor, ChannelSample, ChannelSnapshot, ChannelValue, NumericPoint,
+    };
 
     #[test]
     fn integer_channels_render_numeric_latest_content() {
@@ -1933,6 +2061,9 @@ mod tests {
             format_chart_edge_label("old", 1_000_000_000, 3_500_000_000),
             "2.5s ago"
         );
-        assert_eq!(format_chart_edge_label("now", 3_500_000_000, 3_500_000_000), "now");
+        assert_eq!(
+            format_chart_edge_label("now", 3_500_000_000, 3_500_000_000),
+            "now"
+        );
     }
 }
