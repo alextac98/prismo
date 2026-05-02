@@ -38,3 +38,8 @@ architecture.
 - [Getting Started](./getting-started.md) to start using Prismo quickly locally
 - [Architecture](./ARCHITECTURE.md) to understand the runtime and plugin model
 - [Development](./DEVELOPMENT.md) to extend the project or work on the codebase
+
+## Why the "Prismo" Name?
+
+The name comes from an inside joke from my time at [Inversion Space](https://www.inversionspace.com)
+, with a nod to a [SpaceX](https://spacex.com) internal tool that originally inspired the idea.
