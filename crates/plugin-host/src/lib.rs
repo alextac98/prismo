@@ -3,7 +3,7 @@ mod config;
 use std::io::{BufRead, BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -256,7 +256,7 @@ fn start_plugin_process(
     let mut last_health = PluginHealth::default();
 
     loop {
-        match shutdown_rx.recv_timeout(Duration::from_millis(100)) {
+        match shutdown_rx.try_recv() {
             Ok(SupervisorCommand::Shutdown) => {
                 let _ = write_delimited(
                     &mut stdin,
@@ -273,11 +273,11 @@ fn start_plugin_process(
                     LoopControl::Stopped
                 });
             }
-            Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => {}
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => {}
         }
 
-        match reader_rx.recv_timeout(Duration::from_millis(50)) {
+        match reader_rx.recv_timeout(Duration::from_millis(20)) {
             Ok(ReaderEvent::Envelope(envelope)) => match envelope.message {
                 Some(Message::Hello(hello)) => {
                     validate_hello(plugin, manifest, &hello)?;

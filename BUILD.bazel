@@ -6,6 +6,18 @@ exports_files([
     "MODULE.bazel",
 ])
 
+genrule(
+    name = "prismo_version_env",
+    srcs = ["MODULE.bazel"],
+    outs = ["prismo_version.env"],
+    cmd = """
+version=$$(perl -ne 'if (/^\\s*version\\s*=\\s*"([^\"]+)"/) { print $$1; exit }' $(location MODULE.bazel))
+test -n "$$version"
+printf 'PRISMO_VERSION=%s\n' "$$version" > "$@"
+""",
+    visibility = ["//visibility:public"],
+)
+
 format_multirun(
     name = "format",
     c = "//tools/format:clang_format",

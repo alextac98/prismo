@@ -1983,9 +1983,15 @@ fn history_bounds(history: &[NumericPoint]) -> (f64, f64) {
 mod tests {
     use std::time::Instant;
 
-    use super::{build_channel_latest_content, format_chart_edge_label, LatestPaneContent};
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    use super::{
+        build_channel_latest_content, format_chart_edge_label, plugin_ids, FocusPane,
+        LatestPaneContent, UiState,
+    };
     use prismo_core::{
         ChannelDescriptor, ChannelSample, ChannelSnapshot, ChannelValue, NumericPoint,
+        PluginHealth, PluginRuntimeState, PluginSnapshot, StoreSnapshot,
     };
 
     #[test]
@@ -2046,7 +2052,7 @@ mod tests {
                 );
                 assert_eq!(min_x, 1_000_000_000_f64);
                 assert!(max_x >= 3_000_000_000_f64);
-                assert!(x_labels[0].starts_with("old "));
+                assert!(x_labels[0].ends_with(" ago"));
                 assert_eq!(x_labels[1], "now");
                 assert!(min_y < 40.0);
                 assert!(max_y > 42.0);
@@ -2065,5 +2071,128 @@ mod tests {
             format_chart_edge_label("now", 3_500_000_000, 3_500_000_000),
             "now"
         );
+    }
+
+    #[test]
+    fn plugin_ids_include_running_plugins_and_channel_only_plugins() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("beta"), plugin("alpha")],
+            channels: vec![channel("gamma", "orphan.value"), channel("alpha", "cpu.load")],
+            ..StoreSnapshot::default()
+        };
+
+        assert_eq!(plugin_ids(&snapshot), vec!["alpha", "beta", "gamma"]);
+    }
+
+    #[test]
+    fn filtered_channels_only_include_selected_plugin() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("alpha"), plugin("beta")],
+            channels: vec![
+                channel("alpha", "cpu.load"),
+                channel("beta", "cpu.load"),
+                channel("beta", "memory.used"),
+            ],
+            ..StoreSnapshot::default()
+        };
+        let mut ui = UiState::new();
+
+        assert_eq!(filtered_channel_keys(&ui, &snapshot), vec!["alpha:cpu.load"]);
+
+        ui.select_next_plugin();
+
+        assert_eq!(
+            filtered_channel_keys(&ui, &snapshot),
+            vec!["beta:cpu.load", "beta:memory.used"]
+        );
+    }
+
+    #[test]
+    fn channel_filter_is_applied_within_selected_plugin() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("alpha"), plugin("beta")],
+            channels: vec![
+                channel("alpha", "cpu.load"),
+                channel("alpha", "memory.used"),
+                channel("beta", "memory.used"),
+            ],
+            ..StoreSnapshot::default()
+        };
+        let mut ui = UiState::new();
+        ui.filter_input = "memory".to_string();
+
+        assert_eq!(
+            filtered_channel_keys(&ui, &snapshot),
+            vec!["alpha:memory.used"]
+        );
+    }
+
+    #[test]
+    fn channel_tab_switching_resets_selection_and_changes_visible_channels() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("alpha"), plugin("beta")],
+            channels: vec![channel("alpha", "cpu.load"), channel("beta", "memory.used")],
+            ..StoreSnapshot::default()
+        };
+        let mut ui = UiState::new();
+        ui.selected = 3;
+        ui.channel_scroll_offset = 2;
+
+        ui.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+
+        assert_eq!(ui.selected_plugin, 1);
+        assert_eq!(ui.selected, 0);
+        assert_eq!(ui.channel_scroll_offset, 0);
+        assert_eq!(filtered_channel_keys(&ui, &snapshot), vec!["beta:memory.used"]);
+    }
+
+    #[test]
+    fn non_channel_focus_does_not_switch_plugin_tabs() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("alpha"), plugin("beta")],
+            channels: vec![channel("alpha", "cpu.load"), channel("beta", "memory.used")],
+            ..StoreSnapshot::default()
+        };
+        let mut ui = UiState::new();
+        ui.focus = FocusPane::Details;
+
+        ui.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+
+        assert_eq!(ui.selected_plugin, 0);
+        assert_eq!(filtered_channel_keys(&ui, &snapshot), vec!["alpha:cpu.load"]);
+    }
+
+    fn filtered_channel_keys(ui: &UiState, snapshot: &StoreSnapshot) -> Vec<String> {
+        ui.filtered_channels(snapshot)
+            .into_iter()
+            .map(|channel| format!("{}:{}", channel.plugin_id, channel.descriptor.path))
+            .collect()
+    }
+
+    fn channel(plugin_id: &str, path: &str) -> ChannelSnapshot {
+        ChannelSnapshot {
+            plugin_id: plugin_id.to_string(),
+            descriptor: ChannelDescriptor {
+                path: path.to_string(),
+                display_name: path.to_string(),
+                unit: None,
+                description: format!("{path} description"),
+            },
+            latest: None,
+            history: Vec::new(),
+            update_count: 0,
+            rate_hz: None,
+            is_stale: false,
+        }
+    }
+
+    fn plugin(plugin_id: &str) -> PluginSnapshot {
+        PluginSnapshot {
+            plugin_id: plugin_id.to_string(),
+            state: PluginRuntimeState::Running,
+            restart_count: 0,
+            message: None,
+            health: PluginHealth::default(),
+        }
     }
 }
