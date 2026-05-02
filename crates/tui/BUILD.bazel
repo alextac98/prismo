@@ -1,16 +1,21 @@
 load("@prismo_crates//:defs.bzl", "all_crate_deps")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
+load("@rules_rs//rs:rust_test.bzl", "rust_test")
 
 rust_library(
     name = "tui",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "prismo_tui",
     edition = "2024",
-    rustc_env = {
-        "PRISMO_VERSION": "0.1.3",
-    },
+    rustc_env_files = ["//:prismo_version_env"],
     deps = all_crate_deps(normal = True, cargo_only = True) + [
         "//crates/core:core",
     ],
     visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "tui_test",
+    crate = ":tui",
+    edition = "2024",
 )
