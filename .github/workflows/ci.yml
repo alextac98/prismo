@@ -31,6 +31,12 @@ jobs:
       - name: Bazel Test All
         run: bazel test //...
 
+      - name: Bazel Build All (BCR Incompatible Flags)
+        run: bazel build //... --incompatible_autoload_externally= --incompatible_config_setting_private_default_visibility --incompatible_disable_starlark_host_transitions --incompatible_disable_native_repo_rules --incompatible_strict_action_env
+
+      - name: Bazel Test All (BCR Incompatible Flags)
+        run: bazel test //... --incompatible_autoload_externally= --incompatible_config_setting_private_default_visibility --incompatible_disable_starlark_host_transitions --incompatible_disable_native_repo_rules --incompatible_strict_action_env
+
   release:
     name: Release
     needs: build_and_test

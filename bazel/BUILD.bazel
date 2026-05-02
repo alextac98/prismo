@@ -1,3 +1,5 @@
+load("@rules_shell//shell:defs.bzl", "sh_binary")
+
 exports_files([
     "defs.bzl",
     "prismo-run.sh.tera",
