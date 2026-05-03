@@ -1,5 +1,5 @@
 load("@npm//website:prettier/package_json.bzl", prettier_bin = "bin")
-load("@rules_shell//shell:defs.bzl", "sh_binary")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 config_setting(
     name = "host_linux_aarch64",
