@@ -7,14 +7,14 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::config::{DiscoveredPlugin, PluginManifest, default_plugin_dir, discover_plugins};
-use anyhow::{Context, Result, anyhow, bail};
+use crate::config::{default_plugin_dir, discover_plugins, DiscoveredPlugin, PluginManifest};
+use anyhow::{anyhow, bail, Context, Result};
 use prismo_core::{
     ChannelDescriptor as CoreChannelDescriptor, ChannelSample, ChannelValue, PluginHealth,
     PluginRuntimeState, PluginStatusUpdate, RuntimeEvent, TelemetryUpdate,
 };
 use prismo_plugin_protocol::{
-    Envelope, Health, Init, Message, ValueKind, read_delimited, write_delimited,
+    read_delimited, write_delimited, Envelope, Health, Init, Message, ValueKind,
 };
 
 const PROTOCOL_VERSION: u32 = 1;
@@ -225,11 +225,19 @@ fn start_plugin_process(
 
     let mut stdin = BufWriter::new(child.stdin.take().context("spawned plugin missing stdin")?);
 
+    let config_json = manifest
+        .config
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .context("failed to encode plugin config json")?
+        .unwrap_or_else(|| "{}".to_string());
+
     let init = Init {
         protocol_version: PROTOCOL_VERSION,
         instance_id: plugin.plugin_id.clone(),
         plugin_id: plugin.plugin_id.clone(),
-        config_json: "{}".to_string(),
+        config_json,
     };
     write_delimited(
         &mut stdin,

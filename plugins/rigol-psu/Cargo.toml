@@ -1,0 +1,14 @@
+[package]
+name = "prismo-rigol-psu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rigol_psu"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+prismo-plugin-sdk-rust = { path = "../../crates/plugin-sdk/rust" }
