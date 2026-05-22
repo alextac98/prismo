@@ -10,12 +10,12 @@ docusaurus_bin.docusaurus_binary(
     name = "site_bin",
     chdir = "website",
     data = [
-        ":node_modules",
+        "docusaurus.config.ts",
         "package.json",
         "pnpm-lock.yaml",
-        "docusaurus.config.ts",
         "sidebars.ts",
         "tsconfig.json",
+        ":node_modules",
         ":site_src",
         ":static_assets",
         "//docs:site_docs",
@@ -35,12 +35,12 @@ docusaurus_bin.docusaurus_binary(
     ],
     chdir = "website",
     data = [
-        ":node_modules",
+        "docusaurus.config.ts",
         "package.json",
         "pnpm-lock.yaml",
-        "docusaurus.config.ts",
         "sidebars.ts",
         "tsconfig.json",
+        ":node_modules",
         ":site_src",
         ":static_assets",
         "//docs:site_docs",
@@ -59,12 +59,12 @@ docusaurus_bin.docusaurus_binary(
     ],
     chdir = "website",
     data = [
-        ":node_modules",
+        "docusaurus.config.ts",
         "package.json",
         "pnpm-lock.yaml",
-        "docusaurus.config.ts",
         "sidebars.ts",
         "tsconfig.json",
+        ":node_modules",
         ":site_src",
         ":static_assets",
         "//docs:site_docs",
@@ -73,7 +73,6 @@ docusaurus_bin.docusaurus_binary(
 
 js_run_binary(
     name = "site",
-    tool = ":site_bin",
     args = [
         "build",
         "--out-dir",
@@ -81,14 +80,21 @@ js_run_binary(
     ],
     env = {"NODE_ENV": "production"},
     out_dirs = ["site"],
+    tool = ":site_bin",
 )
 
 filegroup(
     name = "site_src",
-    srcs = glob(["src/**"], exclude = ["**/node_modules/**"]),
+    srcs = glob(
+        ["src/**"],
+        exclude = ["**/node_modules/**"],
+    ),
 )
 
 filegroup(
     name = "static_assets",
-    srcs = glob(["static/**"], exclude = ["**/node_modules/**"]),
+    srcs = glob(
+        ["static/**"],
+        exclude = ["**/node_modules/**"],
+    ),
 )

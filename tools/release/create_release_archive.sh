@@ -12,9 +12,9 @@ prefix_dir="${repo_name}-${VERSION}/"
 archive_ref="${ARCHIVE_REF:-${GITHUB_SHA:-}}"
 
 if [[ -z "${archive_ref}" ]]; then
-  archive_ref="${TAG}"
+	archive_ref="${TAG}"
 fi
 
-git archive --format=tar --prefix="${prefix_dir}" "${archive_ref}" | gzip -n > "${archive_name}"
+git archive --format=tar --prefix="${prefix_dir}" "${archive_ref}" | gzip -n >"${archive_name}"
 
-echo "archive_path=${archive_name}" >> "${GITHUB_OUTPUT}"
+echo "archive_path=${archive_name}" >>"${GITHUB_OUTPUT}"

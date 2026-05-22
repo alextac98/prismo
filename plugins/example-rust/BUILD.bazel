@@ -8,8 +8,11 @@ rust_binary(
     name = "example_rust",
     srcs = ["src/main.rs"],
     edition = "2024",
-    deps = all_crate_deps(normal = True, cargo_only = True) + ["//crates/plugin-sdk/rust:plugin_sdk_rust"],
     visibility = ["//visibility:public"],
+    deps = all_crate_deps(
+        cargo_only = True,
+        normal = True,
+    ) + ["//crates/plugin-sdk/rust:plugin_sdk_rust"],
 )
 
 prismo_plugin(

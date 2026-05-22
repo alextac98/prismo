@@ -8,10 +8,13 @@ rust_library(
     crate_name = "prismo_tui",
     edition = "2024",
     rustc_env_files = ["//:prismo_version_env"],
-    deps = all_crate_deps(normal = True, cargo_only = True) + [
-        "//crates/core:core",
-    ],
     visibility = ["//visibility:public"],
+    deps = all_crate_deps(
+        cargo_only = True,
+        normal = True,
+    ) + [
+        "//crates/core",
+    ],
 )
 
 rust_test(

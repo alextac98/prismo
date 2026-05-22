@@ -6,6 +6,6 @@ rust_binary(
     srcs = glob(["src/**/*.rs"]),
     crate_name = "prismo_ffi_tools",
     edition = "2024",
-    deps = all_crate_deps(normal = True),
     visibility = ["//visibility:public"],
+    deps = all_crate_deps(normal = True),
 )

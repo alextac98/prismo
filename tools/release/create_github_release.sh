@@ -7,20 +7,20 @@ set -euo pipefail
 : "${PRERELEASE:?PRERELEASE is required}"
 
 args=(
-  release
-  create
-  "$TAG"
-  --repo
-  "$GITHUB_REPOSITORY"
-  --target
-  "$GITHUB_SHA"
-  --title
-  "$TAG"
-  --generate-notes
+	release
+	create
+	"$TAG"
+	--repo
+	"$GITHUB_REPOSITORY"
+	--target
+	"$GITHUB_SHA"
+	--title
+	"$TAG"
+	--generate-notes
 )
 
 if [[ "$PRERELEASE" == "true" ]]; then
-  args+=(--prerelease)
+	args+=(--prerelease)
 fi
 
 gh "${args[@]}"

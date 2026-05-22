@@ -61,11 +61,13 @@ bazel run //:format
 Copy uses OSC 52 terminal clipboard output from the app crate.
 
 That means:
+
 - it works best in terminals that explicitly support OSC 52
 - it may be ignored in some local terminals, remote shells, or multiplexers depending on configuration
 - the UI still shows success or failure messages based on whether the write itself succeeded
 
 A shortlist of known good OSC 52 terminals include:
+
 - [xterm](https://invisible-island.net/xterm/)
 - [Ghostty](https://github.com/ghostty/ghostty)
 - [iTerm2](https://iterm2.com/)
@@ -82,24 +84,28 @@ Plugins are designed to exist anywhere, either in this repo or closed sourced in
 If you would like to build a plugin along with the project, please place it in the `plugins/` directory and add a `prismo-plugin.toml` manifest. The example Rust and C++ plugins can be used as a reference.
 
 For a new Rust plugin:
+
 - ship a plugin manifest with a command entrypoint
 - read `Init` from `stdin`
 - emit `Hello`, `DeclareChannels`, `SampleBatch`, and optional `Health`
 - send descriptors before samples that reference them
 
 The normal runtime path is discovery-first:
+
 - bundle plugins under `./plugins` relative to the `prismo` executable
 - use `--plugins /path/to/plugins` when you want to point `prismo` at a different plugin directory
 - for local repo development, use the Bazel example bundle targets so the plugin binaries are laid out next to their manifests
 - keep `prismo-plugin.toml` checked into the plugin directory rather than generating it inside the build
 
 For the current C++ path:
+
 - the canonical protocol is still the protobuf stdio contract
 - C++ code talks to a small Diplomat-generated C++ API
 - the Diplomat layer calls into the Rust SDK core
 - Bazel generates the C and C++ bindings during the `cpp_sdk` build, so there is no separate manual regeneration step
 
 For downstream Bazel integration:
+
 - load `//bazel:defs.bzl`
 - use `prismo_plugin` to package a plugin executable plus a checked-in manifest
 - use `prismo_bundle` to assemble `prismo` plus packaged plugins; the bundle target itself is runnable with `bazel run`
@@ -109,11 +115,13 @@ For downstream Bazel integration:
 The TUI rendering logic is intentionally separate from the core data model and plugin protocol, so new renderers can be added without touching the runtime or plugin contract. Rendering logic lives in `crates/tui/src/lib.rs`.
 
 The current renderer split is by `ChannelValue`:
+
 - bytes -> hex/ASCII block
 - numeric -> text summary plus line chart
 - text/integer/bool -> text block
 
 A few UI rules matter when extending renderers:
+
 - `Details` should stay compact and fixed-height
 - long payloads belong in `Latest Value`
 - scrollable panes should use the shared scrollbar path
@@ -126,6 +134,7 @@ If you add richer value kinds later, this is where new pane renderers should go.
 If you need more telemetry semantics, start in `crates/core/src/model.rs`.
 
 Likely future expansions:
+
 - enums with labels
 - structured key/value values
 - units and formatting hints
@@ -144,6 +153,7 @@ bazel build //website:site
 ```
 
 The current prototype is intentionally small:
+
 - a Rust workspace with a TUI app, an internal telemetry core, a protobuf-based plugin protocol, and example Rust and C++ plugins
 - a two-pane telemetry UI built with `ratatui` and `crossterm`
 - subprocess example plugins that generate randomized or synthetic telemetry so the UI can be developed without a live target
@@ -158,10 +168,12 @@ We appreciate any contributions! If you want to contribute, please open an issue
 The runtime is already subprocess-based and protocol-first.
 
 That means new language support can be added by:
+
 - keeping the same protobuf message contract
 - providing language-specific SDKs
 - reusing the same manifest and bundle layout model
 
 The repo now demonstrates this in two ways:
+
 - Rust plugins through `crates/plugin-sdk/rust`
 - C++ plugins through `crates/plugin-sdk/cpp` and the generated Diplomat bindings

@@ -1,6 +1,9 @@
 load("@aspect_rules_js//js:defs.bzl", "js_library")
 
-DOC_SOURCES = glob(["**"], exclude = ["BUILD.bazel"])
+DOC_SOURCES = glob(
+    ["**"],
+    exclude = ["BUILD.bazel"],
+)
 
 filegroup(
     name = "content",

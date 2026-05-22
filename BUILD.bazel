@@ -1,5 +1,3 @@
-load("@aspect_rules_lint//format:defs.bzl", "format_multirun")
-
 exports_files([
     "Cargo.lock",
     "Cargo.toml",
@@ -18,30 +16,12 @@ printf 'PRISMO_VERSION=%s\n' "$$version" > "$@"
     visibility = ["//visibility:public"],
 )
 
-format_multirun(
-    name = "format",
-    c = "//tools/format:clang_format",
-    cc = "//tools/format:clang_format",
-    css = "//tools/format:prettier",
-    html = "//tools/format:prettier",
-    javascript = "//tools/format:prettier",
-    markdown = "//tools/format:prettier",
-    rust = "//tools/format:rustfmt",
-    shell = "@aspect_rules_lint//format:shfmt",
-    starlark = "//tools/format:buildifier",
-    yaml = "@aspect_rules_lint//format:yamlfmt",
-    rust_check_args = [
-        "--edition",
-        "2024",
-        "--check",
-    ],
-    rust_fix_args = [
-        "--edition",
-        "2024",
-    ],
-)
-
 alias(
     name = "prismo",
     actual = "//app:example_prismo",
+)
+
+alias(
+    name = "format",
+    actual = "//tools/format:format-all",
 )

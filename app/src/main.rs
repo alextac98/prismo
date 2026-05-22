@@ -4,18 +4,18 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use base64::Engine;
 use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use prismo_core::{RuntimeEvent, TelemetryStore};
 use prismo_plugin_host::PluginHost;
-use prismo_tui::{selected_text, FocusPane, UiAction, UiState};
-use ratatui::backend::CrosstermBackend;
+use prismo_tui::{FocusPane, UiAction, UiState, selected_text};
 use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
 use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<()> {

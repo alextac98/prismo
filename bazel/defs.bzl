@@ -7,6 +7,7 @@ PrismoPluginInfo = provider(
         "plugin_dir_name": "Directory name to use inside the bundle.",
     },
 )
+
 def _prismo_plugin_impl(ctx):
     executable = ctx.executable.executable
     executable_name = executable.basename
@@ -21,7 +22,6 @@ def _prismo_plugin_impl(ctx):
             plugin_dir_name = ctx.label.name,
         ),
     ]
-
 
 prismo_plugin = rule(
     implementation = _prismo_plugin_impl,
@@ -41,7 +41,6 @@ prismo_plugin = rule(
     },
     doc = "Packages an executable into the standard Prismo plugin directory layout.",
 )
-
 
 def _prismo_bundle_impl(ctx):
     bundle_dir = ctx.actions.declare_directory(ctx.label.name)
@@ -92,7 +91,6 @@ def _prismo_bundle_impl(ctx):
             runfiles = runfiles,
         ),
     ]
-
 
 prismo_bundle = rule(
     implementation = _prismo_bundle_impl,

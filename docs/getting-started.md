@@ -18,6 +18,7 @@ description: Run Prismo locally and get familiar with the core workflow.
 The fastest way to try Prismo locally is through Bazel.
 
 With Bazel, you can try the example bundle that includes both C++ and Rust plugins:
+
 ```bash
 bazel run //:prismo
 ```
