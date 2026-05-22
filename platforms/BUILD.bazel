@@ -1,7 +1,7 @@
 platform(
     name = "local_windows_msvc",
-    parents = ["@platforms//host"],
     constraint_values = [
         "@rules_rs//rs/platforms/constraints:windows_msvc",
     ],
+    parents = ["@platforms//host"],
 )

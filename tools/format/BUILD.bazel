@@ -1,4 +1,29 @@
+load("@aspect_rules_lint//format:defs.bzl", "format_multirun")
 load("@npm//website:prettier/package_json.bzl", prettier_bin = "bin")
+
+format_multirun(
+    name = "format-all",
+    c = ":clang_format",
+    cc = ":clang_format",
+    css = ":prettier",
+    html = ":prettier",
+    javascript = ":prettier",
+    markdown = ":prettier",
+    rust = ":rustfmt",
+    rust_check_args = [
+        "--edition",
+        "2024",
+        "--check",
+    ],
+    rust_fix_args = [
+        "--edition",
+        "2024",
+    ],
+    shell = "@aspect_rules_lint//format:shfmt",
+    starlark = ":buildifier",
+    visibility = ["//visibility:public"],
+    yaml = "@aspect_rules_lint//format:yamlfmt",
+)
 
 config_setting(
     name = "host_linux_aarch64",
@@ -34,51 +59,38 @@ config_setting(
 
 sh_binary(
     name = "rustfmt",
-    srcs = ["rustfmt.sh"],
-    args = select({
-        ":host_linux_aarch64": ["$(rootpath @@rules_rs++toolchains+rustfmt_linux_aarch64_1_85_0//:rustfmt_bin)"],
-        ":host_linux_x86_64": ["$(rootpath @@rules_rs++toolchains+rustfmt_linux_x86_64_1_85_0//:rustfmt_bin)"],
-        ":host_macos_aarch64": ["$(rootpath @@rules_rs++toolchains+rustfmt_macos_aarch64_1_85_0//:rustfmt_bin)"],
-        ":host_macos_x86_64": ["$(rootpath @@rules_rs++toolchains+rustfmt_macos_x86_64_1_85_0//:rustfmt_bin)"],
-        "//conditions:default": ["$(rootpath @@rules_rs++toolchains+rustfmt_macos_aarch64_1_85_0//:rustfmt_bin)"],
-    }),
-    data = select({
+    srcs = select({
         ":host_linux_aarch64": ["@@rules_rs++toolchains+rustfmt_linux_aarch64_1_85_0//:rustfmt_bin"],
         ":host_linux_x86_64": ["@@rules_rs++toolchains+rustfmt_linux_x86_64_1_85_0//:rustfmt_bin"],
         ":host_macos_aarch64": ["@@rules_rs++toolchains+rustfmt_macos_aarch64_1_85_0//:rustfmt_bin"],
         ":host_macos_x86_64": ["@@rules_rs++toolchains+rustfmt_macos_x86_64_1_85_0//:rustfmt_bin"],
         "//conditions:default": ["@@rules_rs++toolchains+rustfmt_macos_aarch64_1_85_0//:rustfmt_bin"],
     }),
-    visibility = ["//visibility:public"],
 )
 
 alias(
     name = "buildifier",
     actual = "@buildifier_prebuilt//:buildifier",
-    visibility = ["//visibility:public"],
 )
 
 sh_binary(
     name = "clang_format",
-    srcs = ["clang_format.sh"],
-    args = select({
-        ":host_linux_aarch64": ["$(rootpath @clang_format_linux_aarch64//:clang_format/data/bin/clang-format)"],
-        ":host_linux_x86_64": ["$(rootpath @clang_format_linux_x86_64//:clang_format/data/bin/clang-format)"],
-        ":host_macos_aarch64": ["$(rootpath @clang_format_macos_aarch64//:clang_format/data/bin/clang-format)"],
-        ":host_macos_x86_64": ["$(rootpath @clang_format_macos_x86_64//:clang_format/data/bin/clang-format)"],
-        "//conditions:default": ["$(rootpath @clang_format_macos_aarch64//:clang_format/data/bin/clang-format)"],
-    }),
-    data = select({
+    srcs = select({
         ":host_linux_aarch64": ["@clang_format_linux_aarch64//:clang_format/data/bin/clang-format"],
         ":host_linux_x86_64": ["@clang_format_linux_x86_64//:clang_format/data/bin/clang-format"],
         ":host_macos_aarch64": ["@clang_format_macos_aarch64//:clang_format/data/bin/clang-format"],
         ":host_macos_x86_64": ["@clang_format_macos_x86_64//:clang_format/data/bin/clang-format"],
         "//conditions:default": ["@clang_format_macos_aarch64//:clang_format/data/bin/clang-format"],
     }),
-    visibility = ["//visibility:public"],
 )
 
 prettier_bin.prettier_binary(
+    name = "prettier_js",
+)
+
+sh_binary(
     name = "prettier",
+    srcs = ["prettier.sh"],
+    data = [":prettier_js"],
     visibility = ["//visibility:public"],
 )

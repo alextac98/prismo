@@ -28,7 +28,6 @@ def _prismo_diplomat_bindings_impl(ctx):
 
     return [DefaultInfo(files = depset(outputs))]
 
-
 prismo_diplomat_bindings = rule(
     implementation = _prismo_diplomat_bindings_impl,
     attrs = {

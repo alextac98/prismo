@@ -7,14 +7,14 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::config::{default_plugin_dir, discover_plugins, DiscoveredPlugin, PluginManifest};
-use anyhow::{anyhow, bail, Context, Result};
+use crate::config::{DiscoveredPlugin, PluginManifest, default_plugin_dir, discover_plugins};
+use anyhow::{Context, Result, anyhow, bail};
 use prismo_core::{
     ChannelDescriptor as CoreChannelDescriptor, ChannelSample, ChannelValue, PluginHealth,
     PluginRuntimeState, PluginStatusUpdate, RuntimeEvent, TelemetryUpdate,
 };
 use prismo_plugin_protocol::{
-    read_delimited, write_delimited, Envelope, Health, Init, Message, ValueKind,
+    Envelope, Health, Init, Message, ValueKind, read_delimited, write_delimited,
 };
 
 const PROTOCOL_VERSION: u32 = 1;

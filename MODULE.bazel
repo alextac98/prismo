@@ -1,10 +1,11 @@
 module(
     name = "prismo",
-    version = "0.1.5",
+    version = "0.1.6",
 )
 
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "platforms", version = "1.0.0")
+
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 # ==============================================================================
@@ -61,7 +62,10 @@ bazel_dep(name = "llvm", version = "0.7.6")
 toolchain = use_extension("@llvm//extensions:toolchain.bzl", "toolchain")
 use_repo(toolchain, "llvm_toolchains")
 
-register_toolchains("@llvm_toolchains//:all", dev_dependency = True)
+register_toolchains(
+    "@llvm_toolchains//:all",
+    dev_dependency = True,
+)
 
 # ==============================================================================
 # Typescript / Javascript Setup
@@ -84,7 +88,6 @@ use_repo(prismo_npm, "npm")
 
 prismo_pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm")
 use_repo(prismo_pnpm, "pnpm")
-
 
 # ==============================================================================
 # Linter/Formatter Setup

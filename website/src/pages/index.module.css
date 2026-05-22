@@ -4,248 +4,248 @@
 
 /* ── Page shell ── */
 .page {
-    display: flex;
-    flex-direction: column;
-    gap: 5rem;
-    padding: 3rem 1.5rem 6rem;
-    max-width: 900px;
-    margin: 0 auto;
-    font-family: var(--ifm-font-family-monospace);
-    font-size: 0.9rem;
-    line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 5rem;
+  padding: 3rem 1.5rem 6rem;
+  max-width: 900px;
+  margin: 0 auto;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.9rem;
+  line-height: 1.6;
 }
 
 /* ── Shared: prompt char ── */
 .promptChar {
-    color: var(--prismo-accent);
-    user-select: none;
-    text-shadow: 0 0 8px var(--prismo-glow);
+  color: var(--prismo-accent);
+  user-select: none;
+  text-shadow: 0 0 8px var(--prismo-glow);
 }
 
 /* ── Blinking cursor ── */
 .blink {
-    animation: blink 1s step-end infinite;
-    color: var(--prismo-accent);
-    text-shadow: 0 0 8px var(--prismo-glow);
+  animation: blink 1s step-end infinite;
+  color: var(--prismo-accent);
+  text-shadow: 0 0 8px var(--prismo-glow);
 }
 
 @keyframes blink {
-    50% {
-        opacity: 0;
-    }
+  50% {
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .blink {
-        animation: none;
-    }
+  .blink {
+    animation: none;
+  }
 }
 
 /* ════════════════════════════════════
    Hero
    ════════════════════════════════════ */
 .hero {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0;
 }
 
 .heroTitle {
-    font-family:
-        "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino,
-        Georgia, "Times New Roman", serif;
-    font-size: clamp(3.5rem, 10vw, 6rem) !important;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    line-height: 1 !important;
-    color: var(--prismo-accent);
-    text-shadow: none;
-    margin: 0 0 1rem;
+  font-family:
+    "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia,
+    "Times New Roman", serif;
+  font-size: clamp(3.5rem, 10vw, 6rem) !important;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1 !important;
+  color: var(--prismo-accent);
+  text-shadow: none;
+  margin: 0 0 1rem;
 }
 
 .heroTagline {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--ifm-heading-color);
-    margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ifm-heading-color);
+  margin: 0 0 0.5rem;
 }
 
 .heroSubtext {
-    color: var(--ifm-font-color-secondary);
-    margin: 0 0 1.5rem;
-    max-width: 48ch;
+  color: var(--ifm-font-color-secondary);
+  margin: 0 0 1.5rem;
+  max-width: 48ch;
 }
 
 /* ════════════════════════════════════
    Hero screenshot (macOS terminal frame)
    ════════════════════════════════════ */
 .heroScreenshot {
-    width: 100vw;
-    max-width: 1100px;
-    margin: 1rem auto 0;
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
+  width: 100vw;
+  max-width: 1100px;
+  margin: 1rem auto 0;
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .termFrame {
-    border: 1px solid rgba(126, 224, 205, 0.12);
-    background: #0a0a0a;
-    overflow: hidden;
-    border-radius: 8px;
+  border: 1px solid rgba(126, 224, 205, 0.12);
+  background: #0a0a0a;
+  overflow: hidden;
+  border-radius: 8px;
 }
 
 [data-theme="dark"] .termFrame {
-    border-color: rgba(126, 224, 205, 0.08);
-    box-shadow: none;
+  border-color: rgba(126, 224, 205, 0.08);
+  box-shadow: none;
 }
 
 .termBar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    background: #111111;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #111111;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .termDot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
 
 .termDot[data-color="red"] {
-    background: #ff5f57;
+  background: #ff5f57;
 }
 .termDot[data-color="yellow"] {
-    background: #febc2e;
+  background: #febc2e;
 }
 .termDot[data-color="green"] {
-    background: #28c840;
+  background: #28c840;
 }
 
 .termBarTitle {
-    margin-left: 8px;
-    font-size: 0.72rem;
-    color: rgba(255, 255, 255, 0.3);
-    letter-spacing: 0.04em;
+  margin-left: 8px;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.04em;
 }
 
 .screenshot {
-    display: block;
-    width: 100%;
+  display: block;
+  width: 100%;
 }
 
 /* ════════════════════════════════════
    Section dividers
    ════════════════════════════════════ */
 .sectionLine {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .lineLabel {
-    color: #000000;
-    font-size: 0.82rem;
-    white-space: nowrap;
+  color: #000000;
+  font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 :global([data-theme="dark"]) .lineLabel {
-    color: #ffffff;
+  color: #ffffff;
 }
 
 .lineFill {
-    flex: 1;
-    height: 1px;
-    background: var(--ifm-font-color-secondary);
-    opacity: 0.2;
+  flex: 1;
+  height: 1px;
+  background: var(--ifm-font-color-secondary);
+  opacity: 0.2;
 }
 
 /* ════════════════════════════════════
    Features: bordered cards
    ════════════════════════════════════ */
 .featuresSection {
-    width: 100%;
+  width: 100%;
 }
 
 .featureGrid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1.25rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
 }
 
 .featureCard {
-    border: 1px solid var(--ifm-font-color-secondary);
-    padding: 1rem 1.25rem;
-    font-size: 0.8rem;
-    line-height: 1.5;
-    color: #000000;
+  border: 1px solid var(--ifm-font-color-secondary);
+  padding: 1rem 1.25rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #000000;
 }
 
 :global([data-theme="dark"]) .featureCard {
-    color: #ffffff;
+  color: #ffffff;
 }
 
 .featureTitle {
-    font-weight: 700;
-    font-size: 0.85rem !important;
-    color: inherit;
-    margin: 0 0 0.75rem !important;
+  font-weight: 700;
+  font-size: 0.85rem !important;
+  color: inherit;
+  margin: 0 0 0.75rem !important;
 }
 
 .featureBody {
-    color: inherit;
-    margin: 0;
-    white-space: pre-line;
+  color: inherit;
+  margin: 0;
+  white-space: pre-line;
 }
 
 /* ════════════════════════════════════
    Responsive
    ════════════════════════════════════ */
 @media (max-width: 768px) {
-    .page {
-        gap: 3rem;
-        padding: 2rem 1rem 4rem;
-        font-size: 0.85rem;
-    }
+  .page {
+    gap: 3rem;
+    padding: 2rem 1rem 4rem;
+    font-size: 0.85rem;
+  }
 
-    .heroScreenshot {
-        width: calc(100% - 1rem);
-        max-width: none;
-        left: 0;
-        transform: none;
-        margin: 1rem auto 0;
-    }
+  .heroScreenshot {
+    width: calc(100% - 1rem);
+    max-width: none;
+    left: 0;
+    transform: none;
+    margin: 1rem auto 0;
+  }
 
-    .featureGrid {
-        grid-template-columns: 1fr;
-        gap: 0.75rem;
-    }
+  .featureGrid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
 
-    .featureCard {
-        padding: 0.75rem 1rem;
-    }
+  .featureCard {
+    padding: 0.75rem 1rem;
+  }
 
-    .featureBody {
-        white-space: normal;
-    }
+  .featureBody {
+    white-space: normal;
+  }
 }
 
 @media (min-width: 769px) and (max-width: 996px) {
-    .featureGrid {
-        grid-template-columns: 1fr 1fr;
-    }
+  .featureGrid {
+    grid-template-columns: 1fr 1fr;
+  }
 
-    .heroScreenshot {
-        width: calc(100% - 1rem);
-        max-width: none;
-        left: 0;
-        transform: none;
-        margin: 1rem auto 0;
-    }
+  .heroScreenshot {
+    width: calc(100% - 1rem);
+    max-width: none;
+    left: 0;
+    transform: none;
+    margin: 1rem auto 0;
+  }
 }

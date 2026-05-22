@@ -6,29 +6,32 @@ rust_binary(
     name = "prismo",
     srcs = glob(["src/**/*.rs"]),
     edition = "2024",
-    deps = all_crate_deps(normal = True, cargo_only = True) + [
-        "//crates/core:core",
-        "//crates/plugin-host:plugin_host",
-        "//crates/tui:tui",
-    ],
     visibility = ["//visibility:public"],
+    deps = all_crate_deps(
+        cargo_only = True,
+        normal = True,
+    ) + [
+        "//crates/core",
+        "//crates/plugin-host:plugin_host",
+        "//crates/tui",
+    ],
 )
 
 prismo_bundle(
     name = "example_prismo",
-    prismo = ":prismo",
     plugins = [
         "//plugins/example-cpp:example_cpp_plugin",
         "//plugins/example-rust:example_rust_plugin",
     ],
+    prismo = ":prismo",
     visibility = ["//visibility:public"],
 )
 
 prismo_bundle(
     name = "rigol_prismo",
-    prismo = ":prismo",
     plugins = [
-        "//plugins/rigol-psu:rigol_psu_plugin"
+        "//plugins/rigol-psu:rigol_psu_plugin",
     ],
+    prismo = ":prismo",
     visibility = ["//visibility:public"],
 )

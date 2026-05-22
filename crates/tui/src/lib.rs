@@ -1986,8 +1986,8 @@ mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     use super::{
-        build_channel_latest_content, format_chart_edge_label, plugin_ids, FocusPane,
-        LatestPaneContent, UiState,
+        FocusPane, LatestPaneContent, UiState, build_channel_latest_content,
+        format_chart_edge_label, plugin_ids,
     };
     use prismo_core::{
         ChannelDescriptor, ChannelSample, ChannelSnapshot, ChannelValue, NumericPoint,
@@ -2077,7 +2077,10 @@ mod tests {
     fn plugin_ids_include_running_plugins_and_channel_only_plugins() {
         let snapshot = StoreSnapshot {
             plugins: vec![plugin("beta"), plugin("alpha")],
-            channels: vec![channel("gamma", "orphan.value"), channel("alpha", "cpu.load")],
+            channels: vec![
+                channel("gamma", "orphan.value"),
+                channel("alpha", "cpu.load"),
+            ],
             ..StoreSnapshot::default()
         };
 
@@ -2097,7 +2100,10 @@ mod tests {
         };
         let mut ui = UiState::new();
 
-        assert_eq!(filtered_channel_keys(&ui, &snapshot), vec!["alpha:cpu.load"]);
+        assert_eq!(
+            filtered_channel_keys(&ui, &snapshot),
+            vec!["alpha:cpu.load"]
+        );
 
         ui.select_next_plugin();
 
@@ -2143,7 +2149,10 @@ mod tests {
         assert_eq!(ui.selected_plugin, 1);
         assert_eq!(ui.selected, 0);
         assert_eq!(ui.channel_scroll_offset, 0);
-        assert_eq!(filtered_channel_keys(&ui, &snapshot), vec!["beta:memory.used"]);
+        assert_eq!(
+            filtered_channel_keys(&ui, &snapshot),
+            vec!["beta:memory.used"]
+        );
     }
 
     #[test]
@@ -2159,7 +2168,10 @@ mod tests {
         ui.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
 
         assert_eq!(ui.selected_plugin, 0);
-        assert_eq!(filtered_channel_keys(&ui, &snapshot), vec!["alpha:cpu.load"]);
+        assert_eq!(
+            filtered_channel_keys(&ui, &snapshot),
+            vec!["alpha:cpu.load"]
+        );
     }
 
     fn filtered_channel_keys(ui: &UiState, snapshot: &StoreSnapshot) -> Vec<String> {

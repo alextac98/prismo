@@ -28,6 +28,7 @@ adapt Prismo to different systems through plugins.
 ## `crates/core`
 
 This crate owns the core telemetry concepts:
+
 - `ChannelDescriptor`
 - `ChannelValue`
 - `ChannelSample`
@@ -42,12 +43,14 @@ It defines the internal telemetry model used after plugin messages are normalize
 ## `crates/plugin-protocol`
 
 This crate defines the external plugin contract:
+
 - protobuf message types
 - length-prefixed frame helpers
 
 ## `crates/plugin-host`
 
 This crate handles:
+
 - plugin manifest parsing and discovery
 - subprocess spawn and supervision
 - `stdin` / `stdout` / `stderr` transport
@@ -78,6 +81,7 @@ It links against the generated Diplomat C++ bindings and the Rust-backed FFI SDK
 ## `crates/tui`
 
 This crate owns:
+
 - pane layout
 - key and mouse handling
 - focused text cursor behavior
@@ -92,6 +96,7 @@ It renders from `StoreSnapshot` only. It does not talk directly to plugins.
 ## `app`
 
 This crate is the executable. It:
+
 - accepts an optional `--plugins` override directory
 - auto-discovers plugins from a sibling `plugins/` directory by default
 - starts plugin subprocesses through `plugin-host`
@@ -111,6 +116,7 @@ plugin subprocess -> stdio + protobuf -> plugin-host -> RuntimeEvent -> app -> T
 ```
 
 Detailed flow:
+
 1. The app resolves the plugin directory from `--plugins` or from a sibling `plugins/` directory.
 2. The host discovers `prismo-plugin.toml` manifests in that directory.
 3. The host spawns each discovered plugin subprocess.
@@ -123,6 +129,7 @@ Detailed flow:
 ## Telemetry Model
 
 The current canonical value types are:
+
 - `Bool`
 - `Integer`
 - `Float`
@@ -130,6 +137,7 @@ The current canonical value types are:
 - `Bytes`
 
 The store keeps:
+
 - latest sample per channel
 - recent numeric history for charting
 - per-channel update counts
@@ -140,6 +148,7 @@ The store keeps:
 ## Store Behavior
 
 Important store rules:
+
 - channels are keyed by `(plugin_id, path)` in a `BTreeMap`
 - numeric history retention is capped at 64 samples
 - staleness is adaptive: a channel is stale when time since last sample exceeds `3x` the most recent observed interval
@@ -150,12 +159,14 @@ Important store rules:
 ## Plugin Model
 
 Prismo uses a subprocess-first plugin model:
+
 - each plugin runs as a child process
 - the host sends `Init` on `stdin`
 - the plugin writes framed protobuf messages on `stdout`
 - free-form logs go to `stderr`
 
 The current Rust and C++ example plugins send:
+
 - `Hello` on startup
 - `DeclareChannels` once
 - randomized `SampleBatch` messages on each interval tick
@@ -164,6 +175,7 @@ The current Rust and C++ example plugins send:
 ## Build System
 
 Bazel is the primary build system for the repository:
+
 - `MODULE.bazel` pins the Bazel module graph. It is also the authoritative repo version; the Cargo workspace package version is intentionally fixed at `0.0.0`
 - `rules_rs` provides the Rust-facing Bazel surface in this repo, including toolchains and Cargo dependency resolution
 - `rules_python` provides the hermetic Python runtime
@@ -173,10 +185,12 @@ Bazel is the primary build system for the repository:
 - plugin manifests are checked into plugin directories. 1st party supported plugins live in the `plugins/` directory
 
 The downstream Bazel surface is intentionally small:
+
 - `prismo_plugin` packages an executable plus its checked-in manifest
 - `prismo_bundle` assembles the runnable bundle layout and is itself executable via `bazel run`
 
 The current C++ path is intentionally Rust-backed:
+
 - `crates/plugin-sdk/cpp` builds a Rust static library
 - Bazel runs a Rust Diplomat codegen tool and exports the generated C and C++ headers
 - `plugins/example-cpp` links that Rust library into a Bazel-built C++ binary
@@ -186,26 +200,31 @@ Cargo manifests remain in the repo for dependency metadata and editor/tooling su
 ## UI Structure
 
 The UI has three focusable regions:
+
 - `Details`
 - `Latest Value`
 - `Channels`
 
 The overall layout is:
+
 - wide terminals: details on the left, channels on the right, footer on the bottom
 - narrow terminals: details on top, channels below, footer on the bottom
 
 The channels pane is a tree:
+
 - namespaces are derived from dot-separated channel paths
 - namespaces can be collapsed individually with `Enter`
 - the full tree can be toggled with `z`
 - selecting a namespace shows namespace summary details plus descendant channels in the left pane
 
 Renderers:
+
 - numeric values: line chart plus textual summary
 - text/integer/bool values: simple text block
 - bytes values: hex and ASCII summary
 
 The details pane is intentionally fixed-height and non-scrolling:
+
 - channel details render as a five-line summary block
 - namespace details use the same aligned two-column structure
 - latest-value content remains the scrollable/expanded pane for long payloads
@@ -213,15 +232,18 @@ The details pane is intentionally fixed-height and non-scrolling:
 ## Input Model
 
 The input model is split by focus:
+
 - `Channels`: `j/k`, mouse clicks, and mouse wheel choose the active row
 - `Details`: focusable and copyable line-by-line, but intentionally non-scrolling
 - `Latest Value`: cursor movement and mouse wheel act inside the visible text summary
 
 Copy behavior:
+
 - in `Channels`, `y` copies the current live channel value
 - in `Details` or `Latest Value`, `y` copies the current line under the text cursor
 
 Command/filter behavior:
+
 - `/` opens a persistent filter prompt; a non-empty filter remains visible until cleared
 - `Esc` while editing the filter clears it entirely
 - `:` opens command mode
@@ -230,6 +252,7 @@ Command/filter behavior:
 ## Status and Help
 
 The status bar is intentionally compact:
+
 - left side: `:q quit`, `: command`, `? help`, current focus, and transient notices
 - right side: store totals and plugin health
 
@@ -238,6 +261,7 @@ The help overlay is the canonical shortcut reference for the app.
 ## Current Limits
 
 The current implementation does not yet have:
+
 - transport plugins separate from decoders
 - multiple instances of the same plugin type
 - persistence or replay

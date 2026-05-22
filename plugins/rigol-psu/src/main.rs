@@ -3,7 +3,7 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use prismo_plugin_sdk_rust::{channel_descriptor, health, sample, stdio, value_float, value_text};
 use serde::Deserialize;
 

@@ -7,10 +7,10 @@ cc_binary(
     name = "example_cpp",
     srcs = ["src/main.cc"],
     copts = ["-std=c++17"],
+    visibility = ["//visibility:public"],
     deps = [
         "//crates/plugin-sdk/cpp:cpp_sdk",
     ],
-    visibility = ["//visibility:public"],
 )
 
 prismo_plugin(
