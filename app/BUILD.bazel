@@ -23,3 +23,12 @@ prismo_bundle(
     ],
     visibility = ["//visibility:public"],
 )
+
+prismo_bundle(
+    name = "rigol_prismo",
+    prismo = ":prismo",
+    plugins = [
+        "//plugins/rigol-psu:rigol_psu_plugin"
+    ],
+    visibility = ["//visibility:public"],
+)

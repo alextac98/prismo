@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
 #[allow(dead_code)]
@@ -13,6 +13,8 @@ pub struct PluginManifest {
     pub plugin_version: String,
     pub protocol_version: u32,
     pub language: String,
+    #[serde(default)]
+    pub config: Option<toml::Value>,
     pub entrypoint: EntrypointConfig,
 }
 
@@ -167,6 +169,43 @@ argv = ["./single"]
         let discovered = discover_plugins(&root).expect("discover plugin");
         assert_eq!(discovered.len(), 1);
         assert_eq!(discovered[0].manifest.plugin_id, "single");
+    }
+
+    #[test]
+    fn loads_plugin_config_table() {
+        let root = unique_temp_path("prismo-plugin-config");
+        fs::create_dir_all(&root).expect("create root");
+        fs::write(
+            root.join("prismo-plugin.toml"),
+            r#"
+schema_version = 1
+plugin_id = "configured"
+display_name = "Configured"
+plugin_version = "0.1.0"
+protocol_version = 1
+language = "rust"
+
+[entrypoint]
+argv = ["./configured"]
+
+[config]
+ip_address = "10.115.60.123"
+sample_rate_hz = 20.0
+timeout_ms = 5000
+"#,
+        )
+        .expect("write manifest");
+
+        let discovered = discover_plugins(&root).expect("discover plugin");
+        let config = discovered[0]
+            .manifest
+            .config
+            .as_ref()
+            .expect("plugin config");
+
+        assert_eq!(config["ip_address"].as_str(), Some("10.115.60.123"));
+        assert_eq!(config["sample_rate_hz"].as_float(), Some(20.0));
+        assert_eq!(config["timeout_ms"].as_integer(), Some(5000));
     }
 
     fn unique_temp_path(prefix: &str) -> PathBuf {

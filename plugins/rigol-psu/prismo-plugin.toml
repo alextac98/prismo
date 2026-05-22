@@ -1,0 +1,15 @@
+schema_version = 1
+plugin_id = "rigol-psu"
+display_name = "Rigol PSU"
+plugin_version = "0.1.0"
+protocol_version = 1
+language = "rust"
+
+[entrypoint]
+argv = ["./rigol_psu"]
+
+[config]
+ip_address = "192.168.1.100"
+port = 5555
+sample_rate_hz = 20.0
+timeout_ms = 5000

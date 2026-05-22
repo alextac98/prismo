@@ -1,0 +1,20 @@
+load("@prismo_crates//:defs.bzl", "all_crate_deps")
+load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
+load("//bazel:defs.bzl", "prismo_plugin")
+
+exports_files(["prismo-plugin.toml"])
+
+rust_binary(
+    name = "rigol_psu",
+    srcs = ["src/main.rs"],
+    edition = "2024",
+    deps = all_crate_deps(normal = True, cargo_only = True) + ["//crates/plugin-sdk/rust:plugin_sdk_rust"],
+    visibility = ["//visibility:public"],
+)
+
+prismo_plugin(
+    name = "rigol_psu_plugin",
+    executable = ":rigol_psu",
+    manifest = ":prismo-plugin.toml",
+    visibility = ["//visibility:public"],
+)

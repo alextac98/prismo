@@ -869,6 +869,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "prismo-rigol-psu"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "prismo-plugin-sdk-rust",
+ "serde",
+]
+
+[[package]]
 name = "prismo-tui"
 version = "0.0.0"
 dependencies = [
