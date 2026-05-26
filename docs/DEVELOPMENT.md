@@ -100,9 +100,8 @@ The normal runtime path is discovery-first:
 For the current C++ path:
 
 - the canonical protocol is still the protobuf stdio contract
-- C++ code talks to a small Diplomat-generated C++ API
-- the Diplomat layer calls into the Rust SDK core
-- Bazel generates the C and C++ bindings during the `cpp_sdk` build, so there is no separate manual regeneration step
+- C++ code talks to a small header-only C++ API
+- the C++ SDK avoids linking Rust so it can coexist with C++ plugins that already statically link Rust dependencies
 
 For downstream Bazel integration:
 
@@ -176,4 +175,4 @@ That means new language support can be added by:
 The repo now demonstrates this in two ways:
 
 - Rust plugins through `crates/plugin-sdk/rust`
-- C++ plugins through `crates/plugin-sdk/cpp` and the generated Diplomat bindings
+- C++ plugins through `crates/plugin-sdk/cpp`

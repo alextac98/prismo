@@ -64,9 +64,9 @@ This crate is the Rust SDK for writing subprocess plugins.
 
 ## `crates/plugin-sdk/cpp`
 
-This crate exposes a small Diplomat-backed C++ surface on top of the Rust SDK core.
-It lets C++ plugins reuse the same stdio framing and protobuf implementation
-without reimplementing the protocol natively.
+This package exposes a small header-only C++ surface for subprocess plugins.
+It avoids linking Rust into C++ plugins, which lets downstream integrations use
+the SDK even when their plugin binary already statically links Rust dependencies.
 
 ## `plugins/example-rust`
 
@@ -76,7 +76,7 @@ It now runs as a subprocess plugin over the shared wire protocol.
 ## `plugins/example-cpp`
 
 This target contains the current C++ example plugin implementation.
-It links against the generated Diplomat C++ bindings and the Rust-backed FFI SDK.
+It links against the header-only C++ SDK.
 
 ## `crates/tui`
 
@@ -189,11 +189,11 @@ The downstream Bazel surface is intentionally small:
 - `prismo_plugin` packages an executable plus its checked-in manifest
 - `prismo_bundle` assembles the runnable bundle layout and is itself executable via `bazel run`
 
-The current C++ path is intentionally Rust-backed:
+The current C++ path intentionally avoids a Rust link dependency:
 
-- `crates/plugin-sdk/cpp` builds a Rust static library
-- Bazel runs a Rust Diplomat codegen tool and exports the generated C and C++ headers
-- `plugins/example-cpp` links that Rust library into a Bazel-built C++ binary
+- `crates/plugin-sdk/cpp` exports a header-only C++ SDK
+- `plugins/example-cpp` links that SDK into a Bazel-built C++ binary
+- this keeps C++ plugin binaries compatible with downstream projects that already statically link Rust code
 
 Cargo manifests remain in the repo for dependency metadata and editor/tooling support, not as the primary execution path.
 
