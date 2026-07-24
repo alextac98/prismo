@@ -741,7 +741,9 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
     let plugin_ids = plugin_ids(snapshot);
     ui.clamp_selected_plugin(plugin_ids.len());
     let selected_plugin_id = plugin_ids.get(ui.selected_plugin).map(String::as_str);
-    let rows = ui.tree_rows(snapshot);
+    let filtered_channels = ui.filtered_channels(snapshot);
+    let channel_count = filtered_channels.len();
+    let rows = build_tree_rows(filtered_channels, &ui.collapsed_namespaces);
     ui.clamp_selection(rows.len());
 
     let mut list_state = ListState::default()
@@ -783,12 +785,10 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
         {
             format!(
                 "updates:{} dropped:{} channels:{}",
-                plugin.health.emitted_updates,
-                plugin.health.dropped_updates,
-                rows.len()
+                plugin.health.emitted_updates, plugin.health.dropped_updates, channel_count
             )
         } else {
-            format!("starting channels:{}", rows.len())
+            format!("starting channels:{channel_count}")
         }
     } else {
         "plugins: starting".to_string()
@@ -1984,6 +1984,7 @@ mod tests {
     use std::time::Instant;
 
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use ratatui::{Terminal, backend::TestBackend};
 
     use super::{
         FocusPane, LatestPaneContent, UiState, build_channel_latest_content,
@@ -2134,6 +2135,32 @@ mod tests {
     }
 
     #[test]
+    fn channel_stats_exclude_namespace_rows_and_ignore_collapsed_state() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("alpha")],
+            channels: vec![
+                channel("alpha", "power.voltage"),
+                channel("alpha", "power.current"),
+            ],
+            ..StoreSnapshot::default()
+        };
+        let mut ui = UiState::new();
+        let backend = TestBackend::new(120, 40);
+        let mut terminal = Terminal::new(backend).expect("create test terminal");
+
+        terminal
+            .draw(|frame| super::draw(frame, &snapshot, &mut ui))
+            .expect("draw expanded channel tree");
+        assert!(rendered_terminal_text(&terminal).contains("channels:2"));
+
+        ui.collapsed_namespaces.insert("power".to_string());
+        terminal
+            .draw(|frame| super::draw(frame, &snapshot, &mut ui))
+            .expect("draw collapsed channel tree");
+        assert!(rendered_terminal_text(&terminal).contains("channels:2"));
+    }
+
+    #[test]
     fn channel_tab_switching_resets_selection_and_changes_visible_channels() {
         let snapshot = StoreSnapshot {
             plugins: vec![plugin("alpha"), plugin("beta")],
@@ -2178,6 +2205,16 @@ mod tests {
         ui.filtered_channels(snapshot)
             .into_iter()
             .map(|channel| format!("{}:{}", channel.plugin_id, channel.descriptor.path))
+            .collect()
+    }
+
+    fn rendered_terminal_text(terminal: &Terminal<TestBackend>) -> String {
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
             .collect()
     }
 
