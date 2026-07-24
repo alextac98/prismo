@@ -54,6 +54,13 @@ int main() {
            .value_or(false)) {
     return 1;
   }
+  if (!plugin
+           ->declare_channel("cpp.system.rotation", "Rotation", "",
+                             "Nested C++ rotation matrix")
+           .ok()
+           .value_or(false)) {
+    return 1;
+  }
 
   std::uint64_t sequence = 0;
   while (true) {
@@ -85,6 +92,28 @@ int main() {
     if (!plugin
              ->send_enum_sample("cpp.system.mode", timestamp, sequence, mode,
                                 mode_name)
+             .ok()
+             .value_or(false)) {
+      return 1;
+    }
+    const auto rotation_row_0 = PluginSession::array_value(
+        PluginSession::ValueType::Float, 1,
+        {PluginSession::float_value(std::cos(phase)),
+         PluginSession::float_value(-std::sin(phase))});
+    const auto rotation_row_1 = PluginSession::array_value(
+        PluginSession::ValueType::Float, 1,
+        {PluginSession::float_value(std::sin(phase)),
+         PluginSession::float_value(std::cos(phase))});
+    if (!rotation_row_0 || !rotation_row_1) {
+      return 1;
+    }
+    const auto rotation = PluginSession::array_value(
+        PluginSession::ValueType::Float, 2,
+        {*rotation_row_0, *rotation_row_1});
+    if (!rotation ||
+        !plugin
+             ->send_value_sample("cpp.system.rotation", timestamp, sequence,
+                                 *rotation)
              .ok()
              .value_or(false)) {
       return 1;

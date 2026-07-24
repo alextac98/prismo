@@ -26,6 +26,123 @@ class PluginSession
         bool ok_;
     };
 
+    enum class ValueType : std::uint32_t
+    {
+        Unspecified = 0,
+        Bool        = 1,
+        Integer     = 2,
+        Float       = 3,
+        Text        = 4,
+        Bytes       = 5,
+        Enum        = 6,
+        Array       = 7,
+    };
+
+    class Value
+    {
+      public:
+        Value( const Value& )            = default;
+        Value( Value&& )                 = default;
+        Value& operator=( const Value& ) = default;
+        Value& operator=( Value&& )      = default;
+
+      private:
+        Value( ValueType leaf_type, std::uint32_t dimensions, std::vector<std::uint8_t> encoded )
+            : leaf_type_( leaf_type )
+            , dimensions_( dimensions )
+            , encoded_( std::move( encoded ) )
+        {}
+
+        ValueType leaf_type_;
+        std::uint32_t dimensions_;
+        std::vector<std::uint8_t> encoded_;
+
+        friend class PluginSession;
+    };
+
+    static Value bool_value( bool value )
+    {
+        std::vector<std::uint8_t> encoded;
+        put_bool( encoded, static_cast<std::uint32_t>( ValueType::Bool ), value );
+        return Value( ValueType::Bool, 0, std::move( encoded ) );
+    }
+
+    static Value integer_value( std::int64_t value )
+    {
+        std::vector<std::uint8_t> encoded;
+        put_i64( encoded, static_cast<std::uint32_t>( ValueType::Integer ), value );
+        return Value( ValueType::Integer, 0, std::move( encoded ) );
+    }
+
+    static Value float_value( double value )
+    {
+        std::vector<std::uint8_t> encoded;
+        put_f64( encoded, static_cast<std::uint32_t>( ValueType::Float ), value );
+        return Value( ValueType::Float, 0, std::move( encoded ) );
+    }
+
+    static Value text_value( const char* value )
+    {
+        std::vector<std::uint8_t> encoded;
+        put_string( encoded, static_cast<std::uint32_t>( ValueType::Text ), value );
+        return Value( ValueType::Text, 0, std::move( encoded ) );
+    }
+
+    static std::optional<Value> bytes_value( const std::uint8_t* value, std::size_t size )
+    {
+        if ( value == nullptr && size > 0 ) {
+            return std::nullopt;
+        }
+
+        std::vector<std::uint8_t> encoded;
+        put_key( encoded, static_cast<std::uint32_t>( ValueType::Bytes ), 2 );
+        put_varint( encoded, size );
+        if ( size > 0 ) {
+            encoded.insert( encoded.end(), value, value + size );
+        }
+        return Value( ValueType::Bytes, 0, std::move( encoded ) );
+    }
+
+    static Value enum_value( std::int64_t value, const char* name )
+    {
+        std::vector<std::uint8_t> enum_value;
+        put_i64( enum_value, 1, value );
+        put_string( enum_value, 2, name );
+
+        std::vector<std::uint8_t> encoded;
+        put_message( encoded, static_cast<std::uint32_t>( ValueType::Enum ), enum_value );
+        return Value( ValueType::Enum, 0, std::move( encoded ) );
+    }
+
+    static std::optional<Value> array_value( ValueType leaf_type,
+                                             std::uint32_t dimensions,
+                                             std::vector<Value> values )
+    {
+        if ( !is_scalar_value_type( leaf_type ) || dimensions == 0 ) {
+            return std::nullopt;
+        }
+
+        for ( const auto& value : values ) {
+            const bool valid = dimensions == 1
+                                   ? value.dimensions_ == 0 && value.leaf_type_ == leaf_type
+                                   : value.dimensions_ == dimensions - 1 && value.leaf_type_ == leaf_type;
+            if ( !valid ) {
+                return std::nullopt;
+            }
+        }
+
+        std::vector<std::uint8_t> array;
+        put_u64( array, 1, static_cast<std::uint32_t>( leaf_type ) );
+        put_u64( array, 2, dimensions );
+        for ( const auto& value : values ) {
+            put_message( array, 3, value.encoded_ );
+        }
+
+        std::vector<std::uint8_t> encoded;
+        put_message( encoded, static_cast<std::uint32_t>( ValueType::Array ), array );
+        return Value( leaf_type, dimensions, std::move( encoded ) );
+    }
+
     static std::unique_ptr<PluginSession> from_stdio()
     {
         InitConfig init;
@@ -37,6 +154,14 @@ class PluginSession
 
     const std::string& plugin_id() const { return init_.plugin_id; }
     const std::string& config_json() const { return init_.config_json; }
+
+    Result send_value_sample( const char* channel_path,
+                              std::uint64_t timestamp_unix_ns,
+                              std::uint64_t sequence,
+                              const Value& value )
+    {
+        return send_sample( channel_path, timestamp_unix_ns, sequence, value.encoded_ );
+    }
 
     Result send_hello( const char* plugin_version, const char* language )
     {
@@ -72,9 +197,7 @@ class PluginSession
                              std::uint64_t sequence,
                              bool value )
     {
-        std::vector<std::uint8_t> encoded_value;
-        put_bool( encoded_value, static_cast<std::uint32_t>( ValueTag::Bool ), value );
-        return send_sample( channel_path, timestamp_unix_ns, sequence, encoded_value );
+        return send_value_sample( channel_path, timestamp_unix_ns, sequence, bool_value( value ) );
     }
 
     Result send_integer_sample( const char* channel_path,
@@ -82,9 +205,7 @@ class PluginSession
                                 std::uint64_t sequence,
                                 std::int64_t value )
     {
-        std::vector<std::uint8_t> encoded_value;
-        put_i64( encoded_value, static_cast<std::uint32_t>( ValueTag::Integer ), value );
-        return send_sample( channel_path, timestamp_unix_ns, sequence, encoded_value );
+        return send_value_sample( channel_path, timestamp_unix_ns, sequence, integer_value( value ) );
     }
 
     Result send_float_sample( const char* channel_path,
@@ -92,9 +213,7 @@ class PluginSession
                               std::uint64_t sequence,
                               double value )
     {
-        std::vector<std::uint8_t> encoded_value;
-        put_f64( encoded_value, static_cast<std::uint32_t>( ValueTag::Float ), value );
-        return send_sample( channel_path, timestamp_unix_ns, sequence, encoded_value );
+        return send_value_sample( channel_path, timestamp_unix_ns, sequence, float_value( value ) );
     }
 
     Result send_text_sample( const char* channel_path,
@@ -102,9 +221,7 @@ class PluginSession
                              std::uint64_t sequence,
                              const char* value )
     {
-        std::vector<std::uint8_t> encoded_value;
-        put_string( encoded_value, static_cast<std::uint32_t>( ValueTag::Text ), value );
-        return send_sample( channel_path, timestamp_unix_ns, sequence, encoded_value );
+        return send_value_sample( channel_path, timestamp_unix_ns, sequence, text_value( value ) );
     }
 
     Result send_bytes_sample( const char* channel_path,
@@ -113,17 +230,11 @@ class PluginSession
                               const std::uint8_t* value,
                               std::size_t size )
     {
-        if ( value == nullptr && size > 0 ) {
+        const auto encoded = bytes_value( value, size );
+        if ( !encoded ) {
             return Result( false );
         }
-
-        std::vector<std::uint8_t> encoded_value;
-        put_key( encoded_value, static_cast<std::uint32_t>( ValueTag::Bytes ), 2 );
-        put_varint( encoded_value, size );
-        if ( size > 0 ) {
-            encoded_value.insert( encoded_value.end(), value, value + size );
-        }
-        return send_sample( channel_path, timestamp_unix_ns, sequence, encoded_value );
+        return send_value_sample( channel_path, timestamp_unix_ns, sequence, *encoded );
     }
 
     Result send_enum_sample( const char* channel_path,
@@ -132,13 +243,7 @@ class PluginSession
                              std::int64_t value,
                              const char* name )
     {
-        std::vector<std::uint8_t> enum_value;
-        put_i64( enum_value, 1, value );
-        put_string( enum_value, 2, name );
-
-        std::vector<std::uint8_t> encoded_value;
-        put_message( encoded_value, static_cast<std::uint32_t>( ValueTag::Enum ), enum_value );
-        return send_sample( channel_path, timestamp_unix_ns, sequence, encoded_value );
+        return send_value_sample( channel_path, timestamp_unix_ns, sequence, enum_value( value, name ) );
     }
 
     Result send_health( std::uint64_t emitted_updates, std::uint64_t dropped_updates, const char* last_error )
@@ -173,16 +278,6 @@ class PluginSession
         Log             = 7,
     };
 
-    enum class ValueTag : std::uint32_t
-    {
-        Bool    = 1,
-        Integer = 2,
-        Float   = 3,
-        Text    = 4,
-        Bytes   = 5,
-        Enum    = 6,
-    };
-
     struct InitConfig {
         std::uint32_t protocol_version = 0;
         std::string plugin_id = "unknown";
@@ -191,6 +286,11 @@ class PluginSession
 
     static constexpr std::uint32_t protocol_version = 1;
     static constexpr std::uint32_t max_frame_bytes  = 8U * 1024U * 1024U;
+
+    static bool is_scalar_value_type( ValueType value )
+    {
+        return value >= ValueType::Bool && value <= ValueType::Enum;
+    }
 
     explicit PluginSession( InitConfig init )
         : init_( std::move( init ) )

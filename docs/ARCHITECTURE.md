@@ -136,6 +136,13 @@ The current canonical value types are:
 - `Text`
 - `Bytes`
 - `Enum`, represented by an integer discriminant and symbolic name
+- `Array`, represented by a scalar element type, nesting depth, and recursively nested values
+
+Arrays are homogeneous across the complete value tree. Nested arrays may be
+ragged, but every leaf must have the declared scalar type and every branch must
+have the declared nesting depth. Explicit type and depth metadata keeps empty
+arrays unambiguous. Integer and float arrays keep bounded numeric history keyed
+by each leaf's full index path.
 
 The store keeps:
 
@@ -215,14 +222,19 @@ The channels pane is a tree:
 
 - namespaces are derived from dot-separated channel paths
 - namespaces can be collapsed individually with `Enter`
+- array-valued channels and nested arrays are expandable indexed tree nodes
+- scalar array elements are selectable leaves
 - the full tree can be toggled with `z`
-- selecting a namespace shows namespace summary details plus descendant channels in the left pane
+- selecting a namespace or array shows summary details plus its children in the left pane
 
 Renderers:
 
 - numeric values: line chart plus textual summary
 - text/integer/bool values: simple text block
 - enum values: step chart of the integer discriminant plus the symbolic name
+- one-dimensional numeric array nodes: one colored time-series per element
+- multidimensional array nodes: flattened descendant values without a combined chart
+- numeric array leaves: a standard single-series chart for the selected leaf
 - bytes values: hex and ASCII summary
 
 The details pane is intentionally fixed-height and non-scrolling:

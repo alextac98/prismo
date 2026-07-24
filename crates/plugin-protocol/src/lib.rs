@@ -1,6 +1,7 @@
 mod message;
 
 pub use message::{
-    ChannelDescriptor, DeclareChannels, EnumValue, Envelope, Health, Hello, Init, Log, Message,
-    Sample, SampleBatch, Shutdown, Value, ValueKind, read_delimited, write_delimited,
+    ArrayElementType, ArrayValue, ChannelDescriptor, DeclareChannels, EnumValue, Envelope, Health,
+    Hello, Init, Log, Message, Sample, SampleBatch, Shutdown, Value, ValueKind, read_delimited,
+    write_delimited,
 };

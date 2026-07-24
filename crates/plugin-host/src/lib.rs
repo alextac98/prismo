@@ -10,11 +10,13 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use crate::config::{DiscoveredPlugin, PluginManifest, default_plugin_dir, discover_plugins};
 use anyhow::{Context, Result, anyhow, bail};
 use prismo_core::{
-    ChannelDescriptor as CoreChannelDescriptor, ChannelSample, ChannelValue, PluginHealth,
-    PluginRuntimeState, PluginStatusUpdate, RuntimeEvent, TelemetryUpdate,
+    ArrayElementType as CoreArrayElementType, ChannelDescriptor as CoreChannelDescriptor,
+    ChannelSample, ChannelValue, PluginHealth, PluginRuntimeState, PluginStatusUpdate,
+    RuntimeEvent, TelemetryUpdate,
 };
 use prismo_plugin_protocol::{
-    Envelope, Health, Init, Message, ValueKind, read_delimited, write_delimited,
+    ArrayElementType as ProtocolArrayElementType, ArrayValue, Envelope, Health, Init, Message,
+    ValueKind, read_delimited, write_delimited,
 };
 
 const PROTOCOL_VERSION: u32 = 1;
@@ -564,8 +566,8 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use prismo_core::ChannelValue;
-    use prismo_plugin_protocol::{EnumValue, Value, ValueKind};
+    use prismo_core::{ArrayElementType as CoreArrayElementType, ChannelValue};
+    use prismo_plugin_protocol::{ArrayElementType, ArrayValue, EnumValue, Value, ValueKind};
 
     use super::{decode_value, resolve_command, resolve_plugins};
 
@@ -630,6 +632,74 @@ argv = ["./bin/test-plugin"]
         }
     }
 
+    #[test]
+    fn decodes_ragged_nested_array() {
+        let row = |values: Vec<i64>| Value {
+            kind: Some(ValueKind::ArrayValue(ArrayValue {
+                leaf_type: ArrayElementType::Integer as i32,
+                dimensions: 1,
+                values: values
+                    .into_iter()
+                    .map(|value| Value {
+                        kind: Some(ValueKind::IntegerValue(value)),
+                    })
+                    .collect(),
+            })),
+        };
+        let decoded = decode_value(Some(Value {
+            kind: Some(ValueKind::ArrayValue(ArrayValue {
+                leaf_type: ArrayElementType::Integer as i32,
+                dimensions: 2,
+                values: vec![row(vec![1, 2]), row(vec![3]), row(Vec::new())],
+            })),
+        }))
+        .expect("decode nested array");
+
+        match decoded {
+            ChannelValue::Array {
+                leaf_type,
+                dimensions,
+                values,
+            } => {
+                assert_eq!(leaf_type, CoreArrayElementType::Integer);
+                assert_eq!(dimensions, 2);
+                assert_eq!(values.len(), 3);
+                assert!(matches!(
+                    &values[2],
+                    ChannelValue::Array {
+                        leaf_type: CoreArrayElementType::Integer,
+                        dimensions: 1,
+                        values,
+                    } if values.is_empty()
+                ));
+            }
+            _ => panic!("expected array channel value"),
+        }
+    }
+
+    #[test]
+    fn rejects_mixed_array_elements_with_index() {
+        let error = decode_value(Some(Value {
+            kind: Some(ValueKind::ArrayValue(ArrayValue {
+                leaf_type: ArrayElementType::Integer as i32,
+                dimensions: 1,
+                values: vec![
+                    Value {
+                        kind: Some(ValueKind::IntegerValue(1)),
+                    },
+                    Value {
+                        kind: Some(ValueKind::FloatValue(2.0)),
+                    },
+                ],
+            })),
+        }))
+        .expect_err("reject mixed array");
+
+        let message = format!("{error:#}");
+        assert!(message.contains("array element [1]"));
+        assert!(message.contains("expected Integer, received Float"));
+    }
+
     fn unique_temp_path(prefix: &str) -> PathBuf {
         let mut path = std::env::temp_dir();
         let nanos = SystemTime::now()
@@ -652,7 +722,103 @@ fn decode_value(value: Option<prismo_plugin_protocol::Value>) -> Result<ChannelV
             value: value.value,
             name: value.name,
         }),
+        Some(ValueKind::ArrayValue(value)) => decode_array(value),
         None => bail!("sample missing value"),
+    }
+}
+
+fn decode_array(value: ArrayValue) -> Result<ChannelValue> {
+    let leaf_type = decode_array_leaf_type(value.leaf_type)?;
+    if value.dimensions == 0 {
+        bail!("array dimensions must be at least 1");
+    }
+
+    let dimensions = value.dimensions;
+    let values = value
+        .values
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let decoded =
+                decode_value(Some(value)).with_context(|| format!("array element [{index}]"))?;
+            validate_array_element(&decoded, leaf_type, dimensions)
+                .with_context(|| format!("array element [{index}]"))?;
+            Ok(decoded)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(ChannelValue::Array {
+        leaf_type,
+        dimensions,
+        values,
+    })
+}
+
+fn decode_array_leaf_type(value: i32) -> Result<CoreArrayElementType> {
+    match ProtocolArrayElementType::try_from(value).context("array has unknown leaf type")? {
+        ProtocolArrayElementType::Unspecified => bail!("array leaf type must be specified"),
+        ProtocolArrayElementType::Bool => Ok(CoreArrayElementType::Bool),
+        ProtocolArrayElementType::Integer => Ok(CoreArrayElementType::Integer),
+        ProtocolArrayElementType::Float => Ok(CoreArrayElementType::Float),
+        ProtocolArrayElementType::Text => Ok(CoreArrayElementType::Text),
+        ProtocolArrayElementType::Bytes => Ok(CoreArrayElementType::Bytes),
+        ProtocolArrayElementType::Enum => Ok(CoreArrayElementType::Enum),
+    }
+}
+
+fn validate_array_element(
+    value: &ChannelValue,
+    leaf_type: CoreArrayElementType,
+    dimensions: u32,
+) -> Result<()> {
+    if dimensions == 1 {
+        if scalar_element_type(value) == Some(leaf_type) {
+            return Ok(());
+        }
+        bail!(
+            "expected {}, received {}",
+            leaf_type,
+            describe_channel_value_type(value)
+        );
+    }
+
+    match value {
+        ChannelValue::Array {
+            leaf_type: child_type,
+            dimensions: child_dimensions,
+            ..
+        } if *child_type == leaf_type && *child_dimensions == dimensions - 1 => Ok(()),
+        _ => bail!(
+            "expected {}[{}], received {}",
+            leaf_type,
+            dimensions - 1,
+            describe_channel_value_type(value)
+        ),
+    }
+}
+
+fn scalar_element_type(value: &ChannelValue) -> Option<CoreArrayElementType> {
+    match value {
+        ChannelValue::Bool(_) => Some(CoreArrayElementType::Bool),
+        ChannelValue::Integer(_) => Some(CoreArrayElementType::Integer),
+        ChannelValue::Float(_) => Some(CoreArrayElementType::Float),
+        ChannelValue::Text(_) => Some(CoreArrayElementType::Text),
+        ChannelValue::Bytes(_) => Some(CoreArrayElementType::Bytes),
+        ChannelValue::Enum { .. } => Some(CoreArrayElementType::Enum),
+        ChannelValue::Array { .. } => None,
+    }
+}
+
+fn describe_channel_value_type(value: &ChannelValue) -> String {
+    match value {
+        ChannelValue::Array {
+            leaf_type,
+            dimensions,
+            ..
+        } => format!("{leaf_type}[{dimensions}]"),
+        _ => scalar_element_type(value)
+            .map(|element_type| element_type.to_string())
+            .unwrap_or_else(|| "unknown".to_string()),
     }
 }
 

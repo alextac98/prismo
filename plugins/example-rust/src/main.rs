@@ -3,8 +3,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use prismo_plugin_sdk_rust::{
-    ChannelDescriptor, Sample, channel_descriptor, health, sample, stdio, value_bool, value_bytes,
-    value_enum, value_float, value_integer, value_text,
+    ArrayElementType, ChannelDescriptor, Sample, channel_descriptor, health, sample, stdio,
+    value_array, value_bool, value_bytes, value_enum, value_float, value_integer, value_text,
 };
 use rand::Rng;
 use serde::Deserialize;
@@ -17,6 +17,8 @@ enum SyntheticValueKind {
     Text(&'static [&'static str]),
     Bytes { len: usize },
     Enum(&'static [(i64, &'static str)]),
+    FloatArray { len: usize },
+    FloatMatrix { rows: usize, columns: usize },
 }
 
 #[derive(Clone, Copy)]
@@ -100,6 +102,26 @@ impl SyntheticChannelSpec {
             SyntheticValueKind::Enum(options) => {
                 let (value, name) = options[rng.random_range(0..options.len())];
                 value_enum(value, name)
+            }
+            SyntheticValueKind::FloatArray { len } => value_array(
+                ArrayElementType::Float,
+                1,
+                (0..len).map(|index| value_float((phase + index as f64 * 0.4).sin())),
+            )
+            .expect("valid homogeneous float array"),
+            SyntheticValueKind::FloatMatrix { rows, columns } => {
+                let rows = (0..rows).map(|row| {
+                    value_array(
+                        ArrayElementType::Float,
+                        1,
+                        (0..columns).map(|column| {
+                            value_float((phase + row as f64 * 0.3 + column as f64 * 0.4).sin())
+                        }),
+                    )
+                    .expect("valid homogeneous float array row")
+                });
+                value_array(ArrayElementType::Float, 2, rows)
+                    .expect("valid homogeneous float matrix")
             }
         };
 
@@ -470,6 +492,25 @@ impl ExampleRustPlugin {
                     (4, "HOLD"),
                 ]),
                 4,
+                None,
+            ),
+            spec(
+                "guidance.target.error_vector",
+                Some("m"),
+                "Position error vector",
+                SyntheticValueKind::FloatArray { len: 3 },
+                4,
+                None,
+            ),
+            spec(
+                "guidance.trajectory.control_points",
+                Some("m"),
+                "Trajectory control point matrix",
+                SyntheticValueKind::FloatMatrix {
+                    rows: 3,
+                    columns: 3,
+                },
+                8,
                 None,
             ),
             spec(

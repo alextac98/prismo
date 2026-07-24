@@ -4,7 +4,8 @@ use anyhow::{Context, Result, bail};
 use serde::de::DeserializeOwned;
 
 pub use prismo_plugin_protocol::{
-    ChannelDescriptor, EnumValue, Health, Init, Sample, Value, ValueKind,
+    ArrayElementType, ArrayValue, ChannelDescriptor, EnumValue, Health, Init, Sample, Value,
+    ValueKind,
 };
 use prismo_plugin_protocol::{
     DeclareChannels, Envelope, Hello, Log, Message, SampleBatch, read_delimited, write_delimited,
@@ -152,6 +153,99 @@ pub fn value_enum(value: i64, name: impl Into<String>) -> Value {
     }
 }
 
+pub fn value_array(
+    leaf_type: ArrayElementType,
+    dimensions: u32,
+    values: impl IntoIterator<Item = Value>,
+) -> Result<Value> {
+    if leaf_type == ArrayElementType::Unspecified {
+        bail!("array leaf type must be specified");
+    }
+    if dimensions == 0 {
+        bail!("array dimensions must be at least 1");
+    }
+
+    let values = values.into_iter().collect::<Vec<_>>();
+    validate_array_values(leaf_type, dimensions, &values)?;
+
+    Ok(Value {
+        kind: Some(ValueKind::ArrayValue(ArrayValue {
+            leaf_type: leaf_type as i32,
+            dimensions,
+            values,
+        })),
+    })
+}
+
+fn validate_array_values(
+    leaf_type: ArrayElementType,
+    dimensions: u32,
+    values: &[Value],
+) -> Result<()> {
+    for (index, value) in values.iter().enumerate() {
+        validate_array_element(leaf_type, dimensions, value)
+            .with_context(|| format!("array element [{index}]"))?;
+    }
+    Ok(())
+}
+
+fn validate_array_element(
+    leaf_type: ArrayElementType,
+    dimensions: u32,
+    value: &Value,
+) -> Result<()> {
+    let kind = value
+        .kind
+        .as_ref()
+        .context("array element is missing a value")?;
+
+    if dimensions == 1 {
+        let matches = matches!(
+            (leaf_type, kind),
+            (ArrayElementType::Bool, ValueKind::BoolValue(_))
+                | (ArrayElementType::Integer, ValueKind::IntegerValue(_))
+                | (ArrayElementType::Float, ValueKind::FloatValue(_))
+                | (ArrayElementType::Text, ValueKind::TextValue(_))
+                | (ArrayElementType::Bytes, ValueKind::BytesValue(_))
+                | (ArrayElementType::Enum, ValueKind::EnumValue(_))
+        );
+        if matches {
+            return Ok(());
+        }
+        bail!("expected {leaf_type:?}, received {}", value_kind_name(kind));
+    }
+
+    let ValueKind::ArrayValue(array) = kind else {
+        bail!(
+            "expected {leaf_type:?}[{}], received {}",
+            dimensions - 1,
+            value_kind_name(kind)
+        );
+    };
+    let child_type =
+        ArrayElementType::try_from(array.leaf_type).context("array has unknown leaf type")?;
+    if child_type != leaf_type || array.dimensions != dimensions - 1 {
+        bail!(
+            "expected {leaf_type:?}[{}], received {child_type:?}[{}]",
+            dimensions - 1,
+            array.dimensions
+        );
+    }
+    validate_array_values(child_type, array.dimensions, &array.values)
+}
+
+fn value_kind_name(kind: &ValueKind) -> &'static str {
+    match kind {
+        ValueKind::BoolValue(_) => "Bool",
+        ValueKind::IntegerValue(_) => "Integer",
+        ValueKind::FloatValue(_) => "Float",
+        ValueKind::TextValue(_) => "Text",
+        ValueKind::BytesValue(_) => "Bytes",
+        ValueKind::EnumValue(_) => "Enum",
+        ValueKind::ArrayValue(_) => "Array",
+    }
+}
+
 pub fn channel_descriptor<U: Into<String>>(
     channel_path: impl Into<String>,
     display_name: impl Into<String>,
@@ -200,8 +294,10 @@ mod tests {
 
     use serde::Deserialize;
 
-    use super::{build_stdio, value_enum};
-    use prismo_plugin_protocol::{Envelope, Init, Message, ValueKind, write_delimited};
+    use super::{build_stdio, value_array, value_enum, value_float, value_integer};
+    use prismo_plugin_protocol::{
+        ArrayElementType, Envelope, Init, Message, ValueKind, write_delimited,
+    };
 
     #[derive(Debug, Deserialize, Eq, PartialEq)]
     struct ExampleConfig {
@@ -240,5 +336,72 @@ mod tests {
             }
             _ => panic!("expected enum value"),
         }
+    }
+
+    #[test]
+    fn builds_ragged_nested_array() {
+        let first_row = value_array(
+            ArrayElementType::Integer,
+            1,
+            [value_integer(1), value_integer(2)],
+        )
+        .expect("first row");
+        let second_row =
+            value_array(ArrayElementType::Integer, 1, [value_integer(3)]).expect("second row");
+        let empty_row =
+            value_array(ArrayElementType::Integer, 1, std::iter::empty()).expect("empty row");
+
+        let value = value_array(
+            ArrayElementType::Integer,
+            2,
+            [first_row, second_row, empty_row],
+        )
+        .expect("nested array");
+
+        match value.kind {
+            Some(ValueKind::ArrayValue(value)) => {
+                assert_eq!(value.leaf_type, ArrayElementType::Integer as i32);
+                assert_eq!(value.dimensions, 2);
+                assert_eq!(value.values.len(), 3);
+            }
+            _ => panic!("expected array value"),
+        }
+    }
+
+    #[test]
+    fn rejects_mixed_array_elements() {
+        let error = value_array(
+            ArrayElementType::Integer,
+            1,
+            [value_integer(1), value_float(2.0)],
+        )
+        .expect_err("reject mixed array");
+
+        assert!(format!("{error:#}").contains("array element [1]"));
+    }
+
+    #[test]
+    fn rejects_inconsistent_array_depth() {
+        let row =
+            value_array(ArrayElementType::Integer, 1, [value_integer(1)]).expect("integer row");
+        let error = value_array(ArrayElementType::Integer, 3, [row])
+            .expect_err("reject wrong nested depth");
+
+        let message = format!("{error:#}");
+        assert!(message.contains("array element [0]"));
+        assert!(message.contains("expected Integer[2], received Integer[1]"));
+    }
+
+    #[test]
+    fn builds_nested_enum_array() {
+        let row = value_array(
+            ArrayElementType::Enum,
+            1,
+            [value_enum(1, "IDLE"), value_enum(2, "ACTIVE")],
+        )
+        .expect("enum row");
+        let value = value_array(ArrayElementType::Enum, 2, [row]).expect("nested enum array");
+
+        assert!(matches!(value.kind, Some(ValueKind::ArrayValue(_))));
     }
 }
