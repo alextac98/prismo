@@ -91,11 +91,18 @@ pub struct UiState {
     details_cursor: TextCursor,
     latest_cursor: TextCursor,
     collapsed_namespaces: HashSet<String>,
+    collapsed_arrays: HashSet<String>,
 }
 
 pub struct CopyPayload {
     pub text: String,
     pub label: String,
+}
+
+pub struct SelectedValue<'a> {
+    pub channel: &'a ChannelSnapshot,
+    pub value: &'a ChannelValue,
+    pub path: String,
 }
 
 #[derive(Clone)]
@@ -120,13 +127,19 @@ enum LatestPaneContent {
     Text(Vec<SelectableLine>),
     Numeric {
         summary: Vec<SelectableLine>,
-        points: Vec<(f64, f64)>,
+        series: Vec<NumericSeries>,
         min_x: f64,
         max_x: f64,
         x_labels: [String; 2],
         min_y: f64,
         max_y: f64,
     },
+}
+
+struct NumericSeries {
+    name: String,
+    color: Color,
+    points: Vec<(f64, f64)>,
 }
 
 #[derive(Clone, Copy)]
@@ -162,12 +175,30 @@ enum TreeRowKind<'a> {
     Channel {
         channel: &'a ChannelSnapshot,
     },
+    Array {
+        channel: &'a ChannelSnapshot,
+        value: &'a ChannelValue,
+        index_path: Vec<usize>,
+        collapsed: bool,
+    },
+    ArrayElement {
+        channel: &'a ChannelSnapshot,
+        value: &'a ChannelValue,
+        index_path: Vec<usize>,
+    },
 }
 
 #[derive(Clone)]
 enum RowKey {
     Namespace(String),
     Channel(String),
+    Array(String),
+    ArrayElement(String),
+}
+
+enum CollapsibleKey {
+    Namespace(String),
+    Array(String),
 }
 
 impl Default for FocusPane {
@@ -211,31 +242,70 @@ impl UiState {
             details_cursor: TextCursor::default(),
             latest_cursor: TextCursor::default(),
             collapsed_namespaces: HashSet::new(),
+            collapsed_arrays: HashSet::new(),
         }
     }
 
     pub fn selected_channel<'a>(&self, snapshot: &'a StoreSnapshot) -> Option<&'a ChannelSnapshot> {
         match self.selected_row(snapshot)?.kind {
             TreeRowKind::Channel { channel } => Some(channel),
-            TreeRowKind::Namespace { .. } => None,
+            TreeRowKind::Namespace { .. }
+            | TreeRowKind::Array { .. }
+            | TreeRowKind::ArrayElement { .. } => None,
         }
     }
 
     pub fn selected_namespace_path(&self, snapshot: &StoreSnapshot) -> Option<String> {
         match self.selected_row(snapshot)?.kind {
             TreeRowKind::Namespace { path, .. } => Some(path),
-            TreeRowKind::Channel { .. } => None,
+            TreeRowKind::Array {
+                channel,
+                index_path,
+                ..
+            } => Some(array_display_path(channel, &index_path)),
+            TreeRowKind::Channel { .. } | TreeRowKind::ArrayElement { .. } => None,
+        }
+    }
+
+    pub fn selected_value<'a>(&self, snapshot: &'a StoreSnapshot) -> Option<SelectedValue<'a>> {
+        match self.selected_row(snapshot)?.kind {
+            TreeRowKind::Channel { channel } => {
+                channel.latest.as_ref().map(|sample| SelectedValue {
+                    channel,
+                    value: &sample.value,
+                    path: channel.descriptor.path.clone(),
+                })
+            }
+            TreeRowKind::ArrayElement {
+                channel,
+                value,
+                index_path,
+            } => Some(SelectedValue {
+                channel,
+                value,
+                path: array_display_path(channel, &index_path),
+            }),
+            TreeRowKind::Namespace { .. } | TreeRowKind::Array { .. } => None,
         }
     }
 
     pub fn toggle_selected_namespace(&mut self, snapshot: &StoreSnapshot) -> bool {
         let selection = self.selected_row_key(snapshot);
-        let Some(path) = self.selected_namespace_path(snapshot) else {
+        let Some(key) = self.selected_collapsible_key(snapshot) else {
             return false;
         };
 
-        if !self.collapsed_namespaces.insert(path.clone()) {
-            self.collapsed_namespaces.remove(&path);
+        match key {
+            CollapsibleKey::Namespace(path) => {
+                if !self.collapsed_namespaces.insert(path.clone()) {
+                    self.collapsed_namespaces.remove(&path);
+                }
+            }
+            CollapsibleKey::Array(path) => {
+                if !self.collapsed_arrays.insert(path.clone()) {
+                    self.collapsed_arrays.remove(&path);
+                }
+            }
         }
         self.restore_selection(snapshot, selection);
 
@@ -244,23 +314,33 @@ impl UiState {
 
     pub fn toggle_all_namespaces(&mut self, snapshot: &StoreSnapshot) -> (bool, usize) {
         let selection = self.selected_row_key(snapshot);
-        let paths = visible_namespace_paths(self.filtered_channels(snapshot));
-        if paths.is_empty() {
+        let namespace_paths = visible_namespace_paths(self.filtered_channels(snapshot));
+        let array_paths = visible_array_paths(self.filtered_channels(snapshot));
+        let count = namespace_paths.len() + array_paths.len();
+        if count == 0 {
             return (false, 0);
         }
 
-        let all_collapsed = paths
+        let all_namespaces_collapsed = namespace_paths
             .iter()
             .all(|path| self.collapsed_namespaces.contains(path));
+        let all_arrays_collapsed = array_paths
+            .iter()
+            .all(|path| self.collapsed_arrays.contains(path));
+        let all_collapsed = all_namespaces_collapsed && all_arrays_collapsed;
         if all_collapsed {
             self.collapsed_namespaces
-                .retain(|path| !paths.contains(path));
+                .retain(|path| !namespace_paths.contains(path));
+            self.collapsed_arrays
+                .retain(|path| !array_paths.contains(path));
         } else {
-            self.collapsed_namespaces.extend(paths.iter().cloned());
+            self.collapsed_namespaces
+                .extend(namespace_paths.iter().cloned());
+            self.collapsed_arrays.extend(array_paths.iter().cloned());
         }
         self.restore_selection(snapshot, selection);
 
-        (!all_collapsed, paths.len())
+        (!all_collapsed, count)
     }
 
     pub fn clamp_selection(&mut self, total: usize) {
@@ -651,7 +731,11 @@ impl UiState {
     }
 
     fn tree_rows<'a>(&self, snapshot: &'a StoreSnapshot) -> Vec<TreeRow<'a>> {
-        build_tree_rows(self.filtered_channels(snapshot), &self.collapsed_namespaces)
+        build_tree_rows(
+            self.filtered_channels(snapshot),
+            &self.collapsed_namespaces,
+            &self.collapsed_arrays,
+        )
     }
 
     fn selected_row<'a>(&self, snapshot: &'a StoreSnapshot) -> Option<TreeRow<'a>> {
@@ -661,6 +745,18 @@ impl UiState {
 
     fn selected_row_key(&self, snapshot: &StoreSnapshot) -> Option<RowKey> {
         self.selected_row(snapshot).map(|row| row_key(&row))
+    }
+
+    fn selected_collapsible_key(&self, snapshot: &StoreSnapshot) -> Option<CollapsibleKey> {
+        match self.selected_row(snapshot)?.kind {
+            TreeRowKind::Namespace { path, .. } => Some(CollapsibleKey::Namespace(path)),
+            TreeRowKind::Array {
+                channel,
+                index_path,
+                ..
+            } => Some(CollapsibleKey::Array(array_tree_path(channel, &index_path))),
+            TreeRowKind::Channel { .. } | TreeRowKind::ArrayElement { .. } => None,
+        }
     }
 
     fn restore_selection(&mut self, snapshot: &StoreSnapshot, key: Option<RowKey>) {
@@ -674,7 +770,7 @@ impl UiState {
             return;
         }
 
-        for fallback in ancestor_namespace_keys(&key) {
+        for fallback in ancestor_row_keys(&key) {
             if let Some(index) = rows.iter().position(|row| row_matches_key(row, &fallback)) {
                 self.selected = index;
                 return;
@@ -749,7 +845,11 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
     let selected_plugin_id = plugin_ids.get(ui.selected_plugin).map(String::as_str);
     let filtered_channels = ui.filtered_channels(snapshot);
     let channel_count = filtered_channels.len();
-    let rows = build_tree_rows(filtered_channels, &ui.collapsed_namespaces);
+    let rows = build_tree_rows(
+        filtered_channels,
+        &ui.collapsed_namespaces,
+        &ui.collapsed_arrays,
+    );
     ui.clamp_selection(rows.len());
 
     let mut list_state = ListState::default()
@@ -929,7 +1029,7 @@ pub fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &StoreSnapshot, ui: &mut U
             Line::from("h/l or Left/Right switch plugin tabs when Channels is focused"),
             Line::from("h/l or Left/Right move cursor horizontally in focused text panes"),
             Line::from("g/G jump to the first or last visible row"),
-            Line::from("Enter collapse or expand the selected namespace in Channels"),
+            Line::from("Enter collapse or expand the selected namespace or array in Channels"),
             Line::from("z toggle collapse or expand for the full channel tree"),
             Line::from(""),
             Line::from("Actions"),
@@ -1020,7 +1120,7 @@ fn render_latest_value(
         }
         LatestPaneContent::Numeric {
             summary,
-            points,
+            series,
             min_x,
             max_x,
             x_labels,
@@ -1036,12 +1136,22 @@ fn render_latest_value(
                 render_selectable_text(frame, sections[0], summary, cursor, scroll_offset, focused);
 
             if sections[1].height > 0 {
-                let dataset = Dataset::default()
-                    .graph_type(GraphType::Line)
-                    .marker(symbols::Marker::Braille)
-                    .style(Style::default().fg(Color::LightCyan))
-                    .data(points);
-                let chart = Chart::new(vec![dataset])
+                let datasets = series
+                    .iter()
+                    .map(|series| {
+                        let dataset = Dataset::default()
+                            .graph_type(GraphType::Line)
+                            .marker(symbols::Marker::Braille)
+                            .style(Style::default().fg(series.color))
+                            .data(&series.points);
+                        if series.name.is_empty() {
+                            dataset
+                        } else {
+                            dataset.name(series.name.clone())
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let chart = Chart::new(datasets)
                     .x_axis(Axis::default().bounds([*min_x, *max_x]).labels([
                         Line::from(x_labels[0].clone()),
                         Line::from(x_labels[1].clone()),
@@ -1206,6 +1316,53 @@ fn render_tree_row(row: &TreeRow<'_>) -> Line<'static> {
                 Span::styled(value, Style::default().fg(Color::Gray)),
             ])
         }
+        TreeRowKind::Array {
+            channel,
+            value,
+            index_path,
+            collapsed,
+        } => {
+            let indent = "  ".repeat(row.depth);
+            let icon = if *collapsed { "▸" } else { "▾" };
+            let name = index_path
+                .last()
+                .map(|index| format!("[{index}]"))
+                .unwrap_or_else(|| channel.descriptor.display_name.clone());
+            let item_count = match value {
+                ChannelValue::Array { values, .. } => values.len(),
+                _ => 0,
+            };
+            let mut spans = vec![
+                Span::raw(indent),
+                Span::styled(format!("{icon} {name}"), Style::default().fg(Color::Yellow)),
+                Span::raw(" "),
+                Span::styled(format!("[{item_count}]"), Style::default().fg(Color::Gray)),
+            ];
+            if index_path.is_empty() {
+                let marker = if channel.is_stale { "stale" } else { "live" };
+                spans.extend([
+                    Span::raw(" "),
+                    Span::styled(format!("[{marker}]"), status_style(channel.is_stale)),
+                ]);
+            }
+            Line::from(spans)
+        }
+        TreeRowKind::ArrayElement {
+            value, index_path, ..
+        } => {
+            let indent = "  ".repeat(row.depth);
+            let name = index_path
+                .last()
+                .map(|index| format!("[{index}]"))
+                .unwrap_or_else(|| "[]".to_string());
+            Line::from(vec![
+                Span::raw(indent),
+                Span::styled("• ", Style::default().fg(Color::DarkGray)),
+                Span::styled(name, Style::default().fg(Color::Cyan)),
+                Span::raw(" "),
+                Span::styled(value.short_display(), Style::default().fg(Color::Gray)),
+            ])
+        }
     }
 }
 
@@ -1296,12 +1453,32 @@ fn pane_content_for_row(row: &TreeRow<'_>, filter_mode: bool, filter_input: &str
                 descendant_channels,
             )),
         },
+        TreeRowKind::Array {
+            channel,
+            value,
+            index_path,
+            ..
+        } => PaneContent {
+            detail_lines: build_array_detail_lines(channel, value, index_path),
+            latest_title: "Elements".to_string(),
+            latest_content: build_array_latest_content(channel, value, index_path),
+        },
+        TreeRowKind::ArrayElement {
+            channel,
+            value,
+            index_path,
+        } => PaneContent {
+            detail_lines: build_array_element_detail_lines(channel, value, index_path),
+            latest_title: "Value".to_string(),
+            latest_content: build_array_element_latest_content(channel, value, index_path),
+        },
     }
 }
 
 fn build_tree_rows<'a>(
     channels: Vec<&'a ChannelSnapshot>,
     collapsed_namespaces: &HashSet<String>,
+    collapsed_arrays: &HashSet<String>,
 ) -> Vec<TreeRow<'a>> {
     let mut root = NamespaceNode::default();
 
@@ -1330,7 +1507,7 @@ fn build_tree_rows<'a>(
     }
 
     let mut rows = Vec::new();
-    append_tree_rows(&root, 0, collapsed_namespaces, &mut rows);
+    append_tree_rows(&root, 0, collapsed_namespaces, collapsed_arrays, &mut rows);
     rows
 }
 
@@ -1351,10 +1528,42 @@ fn visible_namespace_paths(channels: Vec<&ChannelSnapshot>) -> HashSet<String> {
     paths
 }
 
+fn visible_array_paths(channels: Vec<&ChannelSnapshot>) -> HashSet<String> {
+    let mut paths = HashSet::new();
+    for channel in channels {
+        if let Some(value @ ChannelValue::Array { .. }) =
+            channel.latest.as_ref().map(|sample| &sample.value)
+        {
+            collect_array_paths(channel, value, &mut Vec::new(), &mut paths);
+        }
+    }
+    paths
+}
+
+fn collect_array_paths(
+    channel: &ChannelSnapshot,
+    value: &ChannelValue,
+    index_path: &mut Vec<usize>,
+    paths: &mut HashSet<String>,
+) {
+    let ChannelValue::Array { values, .. } = value else {
+        return;
+    };
+    paths.insert(array_tree_path(channel, index_path));
+    for (index, child) in values.iter().enumerate() {
+        if matches!(child, ChannelValue::Array { .. }) {
+            index_path.push(index);
+            collect_array_paths(channel, child, index_path, paths);
+            index_path.pop();
+        }
+    }
+}
+
 fn append_tree_rows<'a>(
     node: &NamespaceNode<'a>,
     depth: usize,
     collapsed_namespaces: &HashSet<String>,
+    collapsed_arrays: &HashSet<String>,
     rows: &mut Vec<TreeRow<'a>>,
 ) {
     for namespace in node.namespaces.values() {
@@ -1373,15 +1582,78 @@ fn append_tree_rows<'a>(
             },
         });
         if !collapsed {
-            append_tree_rows(namespace, depth + 1, collapsed_namespaces, rows);
+            append_tree_rows(
+                namespace,
+                depth + 1,
+                collapsed_namespaces,
+                collapsed_arrays,
+                rows,
+            );
         }
     }
 
     for channel in &node.channels {
-        rows.push(TreeRow {
-            depth,
-            kind: TreeRowKind::Channel { channel },
-        });
+        match channel.latest.as_ref().map(|sample| &sample.value) {
+            Some(value @ ChannelValue::Array { .. }) => {
+                append_array_tree_rows(channel, value, Vec::new(), depth, collapsed_arrays, rows)
+            }
+            _ => rows.push(TreeRow {
+                depth,
+                kind: TreeRowKind::Channel { channel },
+            }),
+        }
+    }
+}
+
+fn append_array_tree_rows<'a>(
+    channel: &'a ChannelSnapshot,
+    value: &'a ChannelValue,
+    index_path: Vec<usize>,
+    depth: usize,
+    collapsed_arrays: &HashSet<String>,
+    rows: &mut Vec<TreeRow<'a>>,
+) {
+    let ChannelValue::Array { values, .. } = value else {
+        return;
+    };
+    let key = array_tree_path(channel, &index_path);
+    let collapsed = collapsed_arrays.contains(&key);
+    rows.push(TreeRow {
+        depth,
+        kind: TreeRowKind::Array {
+            channel,
+            value,
+            index_path: index_path.clone(),
+            collapsed,
+        },
+    });
+
+    if collapsed {
+        return;
+    }
+
+    for (index, child) in values.iter().enumerate() {
+        let mut child_path = index_path.clone();
+        child_path.push(index);
+        if matches!(child, ChannelValue::Array { .. }) {
+            append_array_tree_rows(
+                channel,
+                child,
+                child_path,
+                depth + 1,
+                collapsed_arrays,
+                rows,
+            );
+        } else {
+            rows.push(TreeRow {
+                depth: depth + 1,
+                kind: TreeRowKind::ArrayElement {
+                    channel,
+                    value: child,
+                    index_path: child_path,
+                },
+            });
+        }
     }
 }
 
@@ -1540,6 +1812,243 @@ fn build_namespace_detail_lines(
     ]
 }
 
+fn build_array_detail_lines(
+    channel: &ChannelSnapshot,
+    value: &ChannelValue,
+    index_path: &[usize],
+) -> Vec<SelectableLine> {
+    let ChannelValue::Array { leaf_type, .. } = value else {
+        return Vec::new();
+    };
+    let state = if channel.is_stale { "stale" } else { "live" };
+    let array_type = format!("array ({})", leaf_type.to_string().to_ascii_lowercase());
+    let description = if index_path.is_empty() {
+        channel.descriptor.description.as_str()
+    } else {
+        "Nested array element"
+    };
+
+    vec![
+        labeled_value_line(
+            "Path",
+            &array_display_path(channel, index_path),
+            primary_style(),
+        ),
+        labeled_value_line("Type", &array_type, primary_style()),
+        labeled_value_line("Shape", &array_shape(value), value_style()),
+        detail_row("Plugin", &channel.plugin_id, "State", state),
+        labeled_value_line("Description", description, value_style()),
+    ]
+}
+
+fn array_shape(value: &ChannelValue) -> String {
+    let ChannelValue::Array {
+        dimensions, values, ..
+    } = value
+    else {
+        return String::new();
+    };
+
+    let outer_size = values.len().to_string();
+    if *dimensions <= 1 {
+        return outer_size;
+    }
+    if values.is_empty() {
+        return std::iter::once(outer_size)
+            .chain(std::iter::repeat_n(
+                "?".to_string(),
+                dimensions.saturating_sub(1) as usize,
+            ))
+            .collect::<Vec<_>>()
+            .join("x");
+    }
+
+    let child_shapes = values
+        .iter()
+        .map(array_shape)
+        .filter(|shape| !shape.is_empty())
+        .collect::<Vec<_>>();
+    if child_shapes.len() != values.len() {
+        return format!("{outer_size}x?");
+    }
+
+    let first = &child_shapes[0];
+    if child_shapes.iter().all(|shape| shape == first) {
+        format!("{outer_size}x{first}")
+    } else {
+        format!("{outer_size}xragged")
+    }
+}
+
+fn build_array_element_detail_lines(
+    channel: &ChannelSnapshot,
+    value: &ChannelValue,
+    index_path: &[usize],
+) -> Vec<SelectableLine> {
+    let state = if channel.is_stale { "stale" } else { "live" };
+    vec![
+        labeled_value_line(
+            "Path",
+            &array_display_path(channel, index_path),
+            primary_style(),
+        ),
+        detail_row(
+            "Type",
+            channel_value_type_name(value),
+            "Value",
+            &value.to_string(),
+        ),
+        detail_row(
+            "Index",
+            &index_path
+                .last()
+                .map(usize::to_string)
+                .unwrap_or_else(|| "n/a".to_string()),
+            "Units",
+            channel.descriptor.unit.as_deref().unwrap_or("-"),
+        ),
+        detail_row("Plugin", &channel.plugin_id, "State", state),
+        labeled_value_line("Description", "Array element", value_style()),
+    ]
+}
+
+fn build_array_descendant_lines(value: &ChannelValue) -> Vec<SelectableLine> {
+    let ChannelValue::Array { values, .. } = value else {
+        return Vec::new();
+    };
+    if values.is_empty() {
+        return vec![plain_line("No elements in this array.")];
+    }
+
+    let mut lines = Vec::new();
+    append_array_descendant_lines(values, &mut Vec::new(), &mut lines);
+    lines
+}
+
+fn append_array_descendant_lines(
+    values: &[ChannelValue],
+    index_path: &mut Vec<usize>,
+    lines: &mut Vec<SelectableLine>,
+) {
+    for (index, value) in values.iter().enumerate() {
+        index_path.push(index);
+        match value {
+            ChannelValue::Array { values, .. } if values.is_empty() => {
+                lines.push(plain_line(&format!(
+                    "{} = empty array",
+                    format_index_path(index_path)
+                )));
+            }
+            ChannelValue::Array { values, .. } => {
+                append_array_descendant_lines(values, index_path, lines);
+            }
+            ChannelValue::Text(text) => lines.push(plain_line(&format!(
+                "{} = {text:?}",
+                format_index_path(index_path)
+            ))),
+            _ => lines.push(plain_line(&format!(
+                "{} = {}",
+                format_index_path(index_path),
+                value.short_display()
+            ))),
+        }
+        index_path.pop();
+    }
+}
+
+fn format_index_path(index_path: &[usize]) -> String {
+    index_path
+        .iter()
+        .map(|index| format!("[{index}]"))
+        .collect()
+}
+
+fn build_array_latest_content(
+    channel: &ChannelSnapshot,
+    value: &ChannelValue,
+    index_path: &[usize],
+) -> LatestPaneContent {
+    if matches!(value, ChannelValue::Array { dimensions: 1, .. }) {
+        if let Some(content) = build_numeric_array_latest_content(channel, index_path, true) {
+            return content;
+        }
+    }
+
+    LatestPaneContent::Text(build_array_descendant_lines(value))
+}
+
+fn build_array_element_latest_content(
+    channel: &ChannelSnapshot,
+    value: &ChannelValue,
+    index_path: &[usize],
+) -> LatestPaneContent {
+    if value.numeric_value().is_some() {
+        if let Some(content) = build_numeric_array_latest_content(channel, index_path, false) {
+            return content;
+        }
+    }
+
+    LatestPaneContent::Text(build_array_element_latest_lines(value))
+}
+
+fn build_array_element_latest_lines(value: &ChannelValue) -> Vec<SelectableLine> {
+    match value {
+        ChannelValue::Bytes(bytes) => {
+            let ascii = bytes
+                .iter()
+                .map(|byte| {
+                    if byte.is_ascii_graphic() {
+                        char::from(*byte)
+                    } else {
+                        '.'
+                    }
+                })
+                .collect::<String>();
+            vec![
+                labeled_value_line(
+                    "HEX",
+                    &bytes
+                        .iter()
+                        .map(|byte| format!("{byte:02X}"))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    value_style(),
+                ),
+                labeled_value_line("ASCII", &ascii, value_style()),
+            ]
+        }
+        ChannelValue::Enum { value, name } => vec![
+            labeled_value_line("Name", name, value_style()),
+            labeled_value_line("Value", &value.to_string(), value_style()),
+        ],
+        ChannelValue::Text(text) => {
+            vec![labeled_value_line(
+                "Value",
+                &format!("{text:?}"),
+                value_style(),
+            )]
+        }
+        ChannelValue::Array { .. } => build_array_descendant_lines(value),
+        _ => vec![labeled_value_line(
+            "Value",
+            &value.to_string(),
+            value_style(),
+        )],
+    }
+}
+
+fn channel_value_type_name(value: &ChannelValue) -> &'static str {
+    match value {
+        ChannelValue::Bool(_) => "bool",
+        ChannelValue::Integer(_) => "integer",
+        ChannelValue::Float(_) => "float",
+        ChannelValue::Text(_) => "text",
+        ChannelValue::Bytes(_) => "bytes",
+        ChannelValue::Enum { .. } => "enum",
+        ChannelValue::Array { .. } => "array",
+    }
+}
+
 fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent {
     let latest = channel.latest.as_ref();
     let last_received = latest
@@ -1551,6 +2060,7 @@ fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent 
         .unwrap_or_else(|| "n/a".to_string());
 
     match latest.map(|sample| &sample.value) {
+        Some(value @ ChannelValue::Array { .. }) => build_array_latest_content(channel, value, &[]),
         Some(ChannelValue::Bytes(bytes)) => {
             let ascii = bytes
                 .iter()
@@ -1668,7 +2178,11 @@ fn build_numeric_latest_content(
 
     LatestPaneContent::Numeric {
         summary,
-        points,
+        series: vec![NumericSeries {
+            name: String::new(),
+            color: Color::LightCyan,
+            points,
+        }],
         min_x: oldest_timestamp_unix_ns as f64,
         max_x: chart_end_timestamp_unix_ns as f64,
         x_labels: [
@@ -1682,6 +2196,199 @@ fn build_numeric_latest_content(
         min_y,
         max_y,
     }
+}
+
+fn build_numeric_array_latest_content(
+    channel: &ChannelSnapshot,
+    selected_path: &[usize],
+    include_children: bool,
+) -> Option<LatestPaneContent> {
+    let sample = channel.latest.as_ref()?;
+    let ChannelValue::Array { .. } = &sample.value else {
+        return None;
+    };
+    let current_values = sample.value.numeric_array_values()?;
+    if channel.array_history.is_empty() {
+        return None;
+    }
+
+    let index_paths = if include_children {
+        current_values
+            .iter()
+            .filter(|value| {
+                value.index_path.starts_with(selected_path)
+                    && value.index_path.len() == selected_path.len() + 1
+            })
+            .map(|value| value.index_path.clone())
+            .collect()
+    } else if current_values
+        .iter()
+        .any(|value| value.index_path == selected_path)
+    {
+        vec![selected_path.to_vec()]
+    } else {
+        return None;
+    };
+    if index_paths.is_empty() {
+        return None;
+    }
+
+    let series = index_paths
+        .iter()
+        .map(|index_path| NumericSeries {
+            name: if include_children {
+                format_index_path(&index_path[selected_path.len()..])
+            } else {
+                String::new()
+            },
+            color: if include_children {
+                numeric_series_color(numeric_series_color_index(
+                    &index_path[selected_path.len()..],
+                ))
+            } else {
+                Color::LightCyan
+            },
+            points: channel
+                .array_history
+                .iter()
+                .filter_map(|point| {
+                    point
+                        .values
+                        .iter()
+                        .find(|value| value.index_path == *index_path)
+                        .map(|value| (point.timestamp_unix_ns as f64, value.value))
+                })
+                .collect(),
+        })
+        .filter(|series| !series.points.is_empty())
+        .collect::<Vec<_>>();
+    if series.is_empty() {
+        return None;
+    }
+
+    let oldest_timestamp_unix_ns = channel
+        .array_history
+        .iter()
+        .find(|point| {
+            index_paths.iter().any(|index_path| {
+                point
+                    .values
+                    .iter()
+                    .any(|value| value.index_path == *index_path)
+            })
+        })
+        .map(|point| point.timestamp_unix_ns)?;
+    let newest_timestamp_unix_ns = channel
+        .array_history
+        .iter()
+        .rev()
+        .find(|point| {
+            index_paths.iter().any(|index_path| {
+                point
+                    .values
+                    .iter()
+                    .any(|value| value.index_path == *index_path)
+            })
+        })
+        .map(|point| point.timestamp_unix_ns)?;
+    let now_timestamp_unix_ns = current_unix_timestamp_ns();
+    let chart_end_timestamp_unix_ns = newest_timestamp_unix_ns.max(now_timestamp_unix_ns);
+    let (min_y, max_y) = numeric_series_bounds(&series);
+    let rate = channel
+        .rate_hz
+        .map(|rate| format!("{rate:.2} Hz"))
+        .unwrap_or_else(|| "n/a".to_string());
+    let last_received = format_duration(sample.observed_at.elapsed());
+    let mut summary = Vec::new();
+    if include_children {
+        summary.push(labeled_value_line(
+            "Series",
+            &index_paths.len().to_string(),
+            value_style(),
+        ));
+    } else {
+        let value = array_value_at_path(&sample.value, selected_path)?;
+        summary.push(labeled_value_line(
+            "Value",
+            &value.to_string(),
+            value_style(),
+        ));
+    }
+    summary.extend([
+        labeled_value_line("Rate", &rate, value_style()),
+        labeled_value_line("Last Received", &last_received, value_style()),
+        labeled_value_line(
+            "Samples",
+            &channel.array_history.len().to_string(),
+            value_style(),
+        ),
+    ]);
+
+    Some(LatestPaneContent::Numeric {
+        summary,
+        series,
+        min_x: oldest_timestamp_unix_ns as f64,
+        max_x: chart_end_timestamp_unix_ns as f64,
+        x_labels: [
+            format_chart_edge_label("old", oldest_timestamp_unix_ns, chart_end_timestamp_unix_ns),
+            format_chart_edge_label(
+                "now",
+                chart_end_timestamp_unix_ns,
+                chart_end_timestamp_unix_ns,
+            ),
+        ],
+        min_y,
+        max_y,
+    })
+}
+
+fn array_value_at_path<'a>(
+    value: &'a ChannelValue,
+    index_path: &[usize],
+) -> Option<&'a ChannelValue> {
+    let mut value = value;
+    for index in index_path {
+        let ChannelValue::Array { values, .. } = value else {
+            return None;
+        };
+        value = values.get(*index)?;
+    }
+    Some(value)
+}
+
+fn numeric_series_color_index(index_path: &[usize]) -> usize {
+    index_path.iter().fold(0usize, |hash, index| {
+        hash.wrapping_mul(31).wrapping_add(*index)
+    })
+}
+
+fn numeric_series_color(index: usize) -> Color {
+    const COLORS: [Color; 12] = [
+        Color::LightCyan,
+        Color::LightMagenta,
+        Color::LightYellow,
+        Color::LightGreen,
+        Color::LightBlue,
+        Color::LightRed,
+        Color::Cyan,
+        Color::Magenta,
+        Color::Yellow,
+        Color::Green,
+        Color::Blue,
+        Color::Red,
+    ];
+    COLORS[index % COLORS.len()]
+}
+
+fn numeric_series_bounds(series: &[NumericSeries]) -> (f64, f64) {
+    let mut min = f64::INFINITY;
+    let mut max = f64::NEG_INFINITY;
+    for (_, value) in series.iter().flat_map(|series| series.points.iter()) {
+        min = min.min(*value);
+        max = max.max(*value);
+    }
+
+    padded_bounds(min, max)
 }
 
 fn numeric_history_points(
@@ -1773,6 +2480,16 @@ fn row_key(row: &TreeRow<'_>) -> RowKey {
     match &row.kind {
         TreeRowKind::Namespace { path, .. } => RowKey::Namespace(path.clone()),
         TreeRowKind::Channel { channel } => RowKey::Channel(channel_tree_path(channel)),
+        TreeRowKind::Array {
+            channel,
+            index_path,
+            ..
+        } => RowKey::Array(array_tree_path(channel, index_path)),
+        TreeRowKind::ArrayElement {
+            channel,
+            index_path,
+            ..
+        } => RowKey::ArrayElement(array_tree_path(channel, index_path)),
     }
 }
 
@@ -1782,6 +2499,22 @@ fn row_matches_key(row: &TreeRow<'_>, key: &RowKey) -> bool {
         (TreeRowKind::Channel { channel }, RowKey::Channel(target)) => {
             channel_tree_path(channel) == *target
         }
+        (
+            TreeRowKind::Array {
+                channel,
+                index_path,
+                ..
+            },
+            RowKey::Array(target),
+        ) => array_tree_path(channel, index_path) == *target,
+        (
+            TreeRowKind::ArrayElement {
+                channel,
+                index_path,
+                ..
+            },
+            RowKey::ArrayElement(target),
+        ) => array_tree_path(channel, index_path) == *target,
         _ => false,
     }
 }
@@ -1792,6 +2525,22 @@ fn channel_tree_path(channel: &ChannelSnapshot) -> String {
 
 fn channel_display_path(channel: &ChannelSnapshot) -> String {
     channel.descriptor.path.clone()
+}
+
+fn array_tree_path(channel: &ChannelSnapshot, index_path: &[usize]) -> String {
+    let mut path = channel_tree_path(channel);
+    for index in index_path {
+        path.push_str(&format!("[{index}]"));
+    }
+    path
+}
+
+fn array_display_path(channel: &ChannelSnapshot, index_path: &[usize]) -> String {
+    let mut path = channel.descriptor.path.clone();
+    for index in index_path {
+        path.push_str(&format!("[{index}]"));
+    }
+    path
 }
 
 fn plugin_ids(snapshot: &StoreSnapshot) -> Vec<String> {
@@ -1811,22 +2560,32 @@ fn plugin_ids(snapshot: &StoreSnapshot) -> Vec<String> {
     plugin_ids.into_iter().collect()
 }
 
-fn ancestor_namespace_keys(key: &RowKey) -> Vec<RowKey> {
-    let path = match key {
-        RowKey::Namespace(path) => path.as_str(),
-        RowKey::Channel(path) => path.as_str(),
-    };
-    let parts = path.split('.').collect::<Vec<_>>();
-    let namespace_end = match key {
-        RowKey::Namespace(_) => parts.len(),
-        RowKey::Channel(_) => parts.len().saturating_sub(1),
-    };
+fn ancestor_row_keys(key: &RowKey) -> Vec<RowKey> {
+    match key {
+        RowKey::Array(path) | RowKey::ArrayElement(path) => {
+            let mut path = path.clone();
+            let mut fallbacks = Vec::new();
+            while let Some(index_start) = path.rfind('[') {
+                path.truncate(index_start);
+                fallbacks.push(RowKey::Array(path.clone()));
+            }
+            fallbacks
+        }
+        RowKey::Namespace(path) | RowKey::Channel(path) => {
+            let parts = path.split('.').collect::<Vec<_>>();
+            let namespace_end = match key {
+                RowKey::Namespace(_) => parts.len(),
+                RowKey::Channel(_) => parts.len().saturating_sub(1),
+                RowKey::Array(_) | RowKey::ArrayElement(_) => unreachable!(),
+            };
 
-    let mut fallbacks = Vec::new();
-    for depth in (1..namespace_end).rev() {
-        fallbacks.push(RowKey::Namespace(parts[..depth].join(".")));
+            let mut fallbacks = Vec::new();
+            for depth in (1..namespace_end).rev() {
+                fallbacks.push(RowKey::Namespace(parts[..depth].join(".")));
+            }
+            fallbacks
+        }
     }
-    fallbacks
 }
 
 fn extract_copy_from_selectable_lines(
@@ -2030,6 +2789,10 @@ fn history_bounds(history: &[NumericPoint]) -> (f64, f64) {
         max = max.max(point.value);
     }
 
+    padded_bounds(min, max)
+}
+
+fn padded_bounds(min: f64, max: f64) -> (f64, f64) {
     if !min.is_finite() || !max.is_finite() {
         return (0.0, 1.0);
     }
@@ -2047,15 +2810,16 @@ mod tests {
     use std::time::Instant;
 
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-    use ratatui::{Terminal, backend::TestBackend};
+    use ratatui::{Terminal, backend::TestBackend, style::Color};
 
     use super::{
         FocusPane, LatestPaneContent, UiState, build_channel_latest_content,
         format_chart_edge_label, plugin_ids,
     };
     use prismo_core::{
-        ChannelDescriptor, ChannelSample, ChannelSnapshot, ChannelValue, NumericPoint,
-        PluginHealth, PluginRuntimeState, PluginSnapshot, StoreSnapshot,
+        ArrayElementType, ChannelDescriptor, ChannelSample, ChannelSnapshot, ChannelValue,
+        NumericArrayPoint, NumericArrayValue, NumericPoint, PluginHealth, PluginRuntimeState,
+        PluginSnapshot, StoreSnapshot,
     };
 
     #[test]
@@ -2090,6 +2854,7 @@ mod tests {
                     value: 42.0,
                 },
             ],
+            array_history: Vec::new(),
             update_count: 3,
             rate_hz: Some(2.0),
             is_stale: false,
@@ -2098,7 +2863,7 @@ mod tests {
         match build_channel_latest_content(&channel) {
             LatestPaneContent::Numeric {
                 summary,
-                points,
+                series,
                 min_x,
                 max_x,
                 x_labels,
@@ -2106,8 +2871,9 @@ mod tests {
                 max_y,
             } => {
                 assert_eq!(summary.len(), 4);
+                assert_eq!(series.len(), 1);
                 assert_eq!(
-                    points,
+                    series[0].points,
                     vec![
                         (1_000_000_000_f64, 40.0),
                         (2_000_000_000_f64, 41.0),
@@ -2160,6 +2926,7 @@ mod tests {
                     value: 2.0,
                 },
             ],
+            array_history: Vec::new(),
             update_count: 3,
             rate_hz: Some(2.0),
             is_stale: false,
@@ -2168,7 +2935,7 @@ mod tests {
         match build_channel_latest_content(&channel) {
             LatestPaneContent::Numeric {
                 summary,
-                points,
+                series,
                 min_y,
                 max_y,
                 ..
@@ -2179,8 +2946,9 @@ mod tests {
                 assert_eq!(summary[2].raw, "Rate: 2.00 Hz");
                 assert!(summary[3].raw.starts_with("Last Received: "));
                 assert_eq!(summary[4].raw, "Samples: 3");
+                assert_eq!(series.len(), 1);
                 assert_eq!(
-                    points,
+                    series[0].points,
                     vec![
                         (1_000_000_000_f64, 0.0),
                         (2_000_000_000_f64, 0.0),
@@ -2196,6 +2964,238 @@ mod tests {
                 panic!("expected numeric content for enum channel")
             }
         }
+    }
+
+    #[test]
+    fn arrays_expand_and_collapse_like_namespaces() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("example")],
+            channels: vec![array_channel("example", "matrix")],
+            ..StoreSnapshot::default()
+        };
+        let mut ui = UiState::new();
+
+        let rows = ui.tree_rows(&snapshot);
+        assert_eq!(rows.len(), 7);
+        assert!(matches!(
+            rows[0].kind,
+            super::TreeRowKind::Array {
+                ref index_path,
+                collapsed: false,
+                ..
+            } if index_path.is_empty()
+        ));
+        assert!(matches!(
+            rows[1].kind,
+            super::TreeRowKind::Array {
+                ref index_path,
+                collapsed: false,
+                ..
+            } if index_path == &[0]
+        ));
+        assert!(matches!(
+            rows[2].kind,
+            super::TreeRowKind::ArrayElement {
+                ref index_path,
+                ..
+            } if index_path == &[0, 0]
+        ));
+
+        assert!(ui.toggle_selected_namespace(&snapshot));
+        let rows = ui.tree_rows(&snapshot);
+        assert_eq!(rows.len(), 1);
+        assert!(matches!(
+            rows[0].kind,
+            super::TreeRowKind::Array {
+                collapsed: true,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn nested_array_elements_are_selectable_values() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("example")],
+            channels: vec![array_channel("example", "matrix")],
+            ..StoreSnapshot::default()
+        };
+        let mut ui = UiState::new();
+        ui.selected = 3;
+
+        let selected = ui
+            .selected_value(&snapshot)
+            .expect("select nested array element");
+        assert_eq!(selected.path, "matrix[0][1]");
+        assert_eq!(selected.value.to_string(), "2");
+    }
+
+    #[test]
+    fn nested_numeric_array_element_plots_its_path_history() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("example")],
+            channels: vec![array_channel("example", "matrix")],
+            ..StoreSnapshot::default()
+        };
+        let ui = UiState::new();
+        let rows = ui.tree_rows(&snapshot);
+        let content = super::pane_content_for_row(&rows[3], false, "");
+
+        match content.latest_content {
+            LatestPaneContent::Numeric {
+                summary, series, ..
+            } => {
+                assert_eq!(summary[0].raw, "Value: 2");
+                assert_eq!(series.len(), 1);
+                assert!(series[0].name.is_empty());
+                assert_eq!(series[0].color, Color::LightCyan);
+                assert_eq!(
+                    series[0].points,
+                    vec![(1_000_000_000_f64, 1.5), (2_000_000_000_f64, 2.0),]
+                );
+            }
+            LatestPaneContent::Text(_) => panic!("expected nested numeric element chart"),
+        }
+    }
+
+    #[test]
+    fn nested_one_dimensional_array_plots_its_children_as_colored_series() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("example")],
+            channels: vec![array_channel("example", "matrix")],
+            ..StoreSnapshot::default()
+        };
+        let ui = UiState::new();
+        let rows = ui.tree_rows(&snapshot);
+        let content = super::pane_content_for_row(&rows[1], false, "");
+
+        match content.latest_content {
+            LatestPaneContent::Numeric {
+                summary, series, ..
+            } => {
+                assert_eq!(summary[0].raw, "Series: 2");
+                assert_eq!(series.len(), 2);
+                assert_eq!(series[0].name, "[0]");
+                assert_eq!(series[1].name, "[1]");
+                assert_ne!(series[0].color, series[1].color);
+                assert_eq!(
+                    series[0].points,
+                    vec![(1_000_000_000_f64, 0.5), (2_000_000_000_f64, 1.0)]
+                );
+                assert_eq!(
+                    series[1].points,
+                    vec![(1_000_000_000_f64, 1.5), (2_000_000_000_f64, 2.0)]
+                );
+            }
+            LatestPaneContent::Text(_) => panic!("expected nested row numeric chart"),
+        }
+    }
+
+    #[test]
+    fn nested_array_panes_show_all_descendant_values() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("example")],
+            channels: vec![array_channel("example", "matrix")],
+            ..StoreSnapshot::default()
+        };
+        let ui = UiState::new();
+        let rows = ui.tree_rows(&snapshot);
+        let content = super::pane_content_for_row(&rows[0], false, "");
+
+        assert_eq!(content.latest_title, "Elements");
+        assert_eq!(content.detail_lines[0].raw, "Path: matrix");
+        assert_eq!(content.detail_lines[1].raw, "Type: array (integer)");
+        assert_eq!(content.detail_lines[2].raw, "Shape: 2x2");
+        match content.latest_content {
+            LatestPaneContent::Text(lines) => {
+                assert_eq!(
+                    lines
+                        .iter()
+                        .map(|line| line.raw.as_str())
+                        .collect::<Vec<_>>(),
+                    vec!["[0][0] = 1", "[0][1] = 2", "[1][0] = 3", "[1][1] = 4"]
+                );
+            }
+            LatestPaneContent::Numeric { .. } => panic!("nested arrays should not be plotted"),
+        }
+    }
+
+    #[test]
+    fn flat_numeric_array_plots_each_element_as_a_colored_series() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("example")],
+            channels: vec![flat_numeric_array_channel("example", "sensors")],
+            ..StoreSnapshot::default()
+        };
+        let ui = UiState::new();
+        let rows = ui.tree_rows(&snapshot);
+        let content = super::pane_content_for_row(&rows[0], false, "");
+
+        match content.latest_content {
+            LatestPaneContent::Numeric {
+                summary, series, ..
+            } => {
+                assert_eq!(summary[0].raw, "Series: 2");
+                assert_eq!(series.len(), 2);
+                assert_eq!(series[0].name, "[0]");
+                assert_eq!(series[1].name, "[1]");
+                assert_ne!(series[0].color, series[1].color);
+                assert_eq!(
+                    series[0].points,
+                    vec![(1_000_000_000_f64, 1.0), (2_000_000_000_f64, 1.5),]
+                );
+                assert_eq!(
+                    series[1].points,
+                    vec![(1_000_000_000_f64, 2.0), (2_000_000_000_f64, 2.5),]
+                );
+            }
+            LatestPaneContent::Text(_) => panic!("expected numeric array chart"),
+        }
+    }
+
+    #[test]
+    fn numeric_array_element_plots_its_series() {
+        let snapshot = StoreSnapshot {
+            plugins: vec![plugin("example")],
+            channels: vec![flat_numeric_array_channel("example", "sensors")],
+            ..StoreSnapshot::default()
+        };
+        let ui = UiState::new();
+        let rows = ui.tree_rows(&snapshot);
+        let content = super::pane_content_for_row(&rows[2], false, "");
+
+        match content.latest_content {
+            LatestPaneContent::Numeric {
+                summary, series, ..
+            } => {
+                assert_eq!(summary[0].raw, "Value: 2.500");
+                assert_eq!(series.len(), 1);
+                assert!(series[0].name.is_empty());
+                assert_eq!(series[0].color, Color::LightCyan);
+                assert_eq!(
+                    series[0].points,
+                    vec![(1_000_000_000_f64, 2.0), (2_000_000_000_f64, 2.5),]
+                );
+            }
+            LatestPaneContent::Text(_) => panic!("expected numeric element chart"),
+        }
+    }
+
+    #[test]
+    fn ragged_array_shape_is_explicit() {
+        let mut channel = array_channel("example", "matrix");
+        let ChannelValue::Array { values, .. } =
+            &mut channel.latest.as_mut().expect("array sample").value
+        else {
+            panic!("expected root array");
+        };
+        let ChannelValue::Array { values, .. } = &mut values[1] else {
+            panic!("expected nested array");
+        };
+        values.pop();
+
+        let value = &channel.latest.as_ref().expect("array sample").value;
+        assert_eq!(super::array_shape(value), "2xragged");
     }
 
     #[test]
@@ -2365,8 +3365,148 @@ mod tests {
             },
             latest: None,
             history: Vec::new(),
+            array_history: Vec::new(),
             update_count: 0,
             rate_hz: None,
+            is_stale: false,
+        }
+    }
+
+    fn array_channel(plugin_id: &str, path: &str) -> ChannelSnapshot {
+        ChannelSnapshot {
+            plugin_id: plugin_id.to_string(),
+            descriptor: ChannelDescriptor {
+                path: path.to_string(),
+                display_name: "Matrix".to_string(),
+                unit: None,
+                description: "Ragged integer matrix".to_string(),
+            },
+            latest: Some(ChannelSample {
+                path: path.to_string(),
+                value: ChannelValue::Array {
+                    leaf_type: ArrayElementType::Integer,
+                    dimensions: 2,
+                    values: vec![
+                        ChannelValue::Array {
+                            leaf_type: ArrayElementType::Integer,
+                            dimensions: 1,
+                            values: vec![ChannelValue::Integer(1), ChannelValue::Integer(2)],
+                        },
+                        ChannelValue::Array {
+                            leaf_type: ArrayElementType::Integer,
+                            dimensions: 1,
+                            values: vec![ChannelValue::Integer(3), ChannelValue::Integer(4)],
+                        },
+                    ],
+                },
+                observed_at: Instant::now(),
+                received_timestamp_unix_ns: 3_000_000_000,
+                source_timestamp_unix_ns: 42,
+                sequence: 1,
+            }),
+            history: Vec::new(),
+            array_history: vec![
+                NumericArrayPoint {
+                    timestamp_unix_ns: 1_000_000_000,
+                    values: vec![
+                        NumericArrayValue {
+                            index_path: vec![0, 0],
+                            value: 0.5,
+                        },
+                        NumericArrayValue {
+                            index_path: vec![0, 1],
+                            value: 1.5,
+                        },
+                        NumericArrayValue {
+                            index_path: vec![1, 0],
+                            value: 2.5,
+                        },
+                        NumericArrayValue {
+                            index_path: vec![1, 1],
+                            value: 3.5,
+                        },
+                    ],
+                },
+                NumericArrayPoint {
+                    timestamp_unix_ns: 2_000_000_000,
+                    values: vec![
+                        NumericArrayValue {
+                            index_path: vec![0, 0],
+                            value: 1.0,
+                        },
+                        NumericArrayValue {
+                            index_path: vec![0, 1],
+                            value: 2.0,
+                        },
+                        NumericArrayValue {
+                            index_path: vec![1, 0],
+                            value: 3.0,
+                        },
+                        NumericArrayValue {
+                            index_path: vec![1, 1],
+                            value: 4.0,
+                        },
+                    ],
+                },
+            ],
+            update_count: 1,
+            rate_hz: Some(2.0),
+            is_stale: false,
+        }
+    }
+
+    fn flat_numeric_array_channel(plugin_id: &str, path: &str) -> ChannelSnapshot {
+        ChannelSnapshot {
+            plugin_id: plugin_id.to_string(),
+            descriptor: ChannelDescriptor {
+                path: path.to_string(),
+                display_name: "Sensors".to_string(),
+                unit: None,
+                description: "Sensor values".to_string(),
+            },
+            latest: Some(ChannelSample {
+                path: path.to_string(),
+                value: ChannelValue::Array {
+                    leaf_type: ArrayElementType::Float,
+                    dimensions: 1,
+                    values: vec![ChannelValue::Float(1.5), ChannelValue::Float(2.5)],
+                },
+                observed_at: Instant::now(),
+                received_timestamp_unix_ns: 2_000_000_000,
+                source_timestamp_unix_ns: 2_000_000_000,
+                sequence: 2,
+            }),
+            history: Vec::new(),
+            array_history: vec![
+                NumericArrayPoint {
+                    timestamp_unix_ns: 1_000_000_000,
+                    values: vec![
+                        NumericArrayValue {
+                            index_path: vec![0],
+                            value: 1.0,
+                        },
+                        NumericArrayValue {
+                            index_path: vec![1],
+                            value: 2.0,
+                        },
+                    ],
+                },
+                NumericArrayPoint {
+                    timestamp_unix_ns: 2_000_000_000,
+                    values: vec![
+                        NumericArrayValue {
+                            index_path: vec![0],
+                            value: 1.5,
+                        },
+                        NumericArrayValue {
+                            index_path: vec![1],
+                            value: 2.5,
+                        },
+                    ],
+                },
+            ],
+            update_count: 2,
+            rate_hz: Some(2.0),
             is_stale: false,
         }
     }

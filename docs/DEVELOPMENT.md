@@ -119,6 +119,9 @@ The current renderer split is by `ChannelValue`:
 - numeric -> text summary plus line chart
 - text/integer/bool -> text block
 - enum -> integer-discriminant step chart plus symbolic name
+- one-dimensional numeric array node -> one colored time-series per element
+- multidimensional array node -> indexed tree nodes plus flattened descendant values
+- numeric array leaf -> a standard single-series chart keyed by its full index path
 
 A few UI rules matter when extending renderers:
 

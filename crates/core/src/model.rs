@@ -16,7 +16,38 @@ pub enum ChannelValue {
     Float(f64),
     Text(String),
     Bytes(Vec<u8>),
-    Enum { value: i64, name: String },
+    Enum {
+        value: i64,
+        name: String,
+    },
+    Array {
+        leaf_type: ArrayElementType,
+        dimensions: u32,
+        values: Vec<ChannelValue>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArrayElementType {
+    Bool,
+    Integer,
+    Float,
+    Text,
+    Bytes,
+    Enum,
+}
+
+impl fmt::Display for ArrayElementType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Bool => f.write_str("Bool"),
+            Self::Integer => f.write_str("Integer"),
+            Self::Float => f.write_str("Float"),
+            Self::Text => f.write_str("Text"),
+            Self::Bytes => f.write_str("Bytes"),
+            Self::Enum => f.write_str("Enum"),
+        }
+    }
 }
 
 impl ChannelValue {
@@ -42,7 +73,71 @@ impl ChannelValue {
                 .collect::<Vec<_>>()
                 .join(" "),
             Self::Enum { value, name } => format_enum_value(*value, name),
+            Self::Array {
+                leaf_type,
+                dimensions,
+                values,
+            } => format_array_summary(*leaf_type, *dimensions, values.len()),
         }
+    }
+
+    pub fn numeric_array_values(&self) -> Option<Vec<NumericArrayValue>> {
+        let Self::Array { leaf_type, .. } = self else {
+            return None;
+        };
+
+        if !matches!(
+            leaf_type,
+            ArrayElementType::Integer | ArrayElementType::Float
+        ) {
+            return None;
+        }
+
+        let mut values = Vec::new();
+        if append_numeric_array_values(self, *leaf_type, &mut Vec::new(), &mut values) {
+            Some(values)
+        } else {
+            None
+        }
+    }
+}
+
+fn append_numeric_array_values(
+    value: &ChannelValue,
+    leaf_type: ArrayElementType,
+    index_path: &mut Vec<usize>,
+    values: &mut Vec<NumericArrayValue>,
+) -> bool {
+    match value {
+        ChannelValue::Array {
+            leaf_type: nested_leaf_type,
+            values: nested_values,
+            ..
+        } if *nested_leaf_type == leaf_type => {
+            for (index, nested_value) in nested_values.iter().enumerate() {
+                index_path.push(index);
+                if !append_numeric_array_values(nested_value, leaf_type, index_path, values) {
+                    return false;
+                }
+                index_path.pop();
+            }
+            true
+        }
+        ChannelValue::Integer(value) if leaf_type == ArrayElementType::Integer => {
+            values.push(NumericArrayValue {
+                index_path: index_path.clone(),
+                value: *value as f64,
+            });
+            true
+        }
+        ChannelValue::Float(value) if leaf_type == ArrayElementType::Float => {
+            values.push(NumericArrayValue {
+                index_path: index_path.clone(),
+                value: *value,
+            });
+            true
+        }
+        _ => false,
     }
 }
 
@@ -62,6 +157,11 @@ impl fmt::Display for ChannelValue {
                 f.write_str(&rendered)
             }
             Self::Enum { value, name } => f.write_str(&format_enum_value(*value, name)),
+            Self::Array {
+                leaf_type,
+                dimensions,
+                values,
+            } => f.write_str(&format_array_summary(*leaf_type, *dimensions, values.len())),
         }
     }
 }
@@ -72,6 +172,15 @@ fn format_enum_value(value: i64, name: &str) -> String {
     } else {
         format!("{name} ({value})")
     }
+}
+
+fn format_array_summary(
+    leaf_type: ArrayElementType,
+    dimensions: u32,
+    value_count: usize,
+) -> String {
+    let item_label = if value_count == 1 { "item" } else { "items" };
+    format!("{leaf_type}[{dimensions}] ({value_count} {item_label})")
 }
 
 #[derive(Clone, Debug)]
@@ -97,6 +206,18 @@ impl ChannelSample {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NumericPoint {
     pub timestamp_unix_ns: u64,
+    pub value: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct NumericArrayPoint {
+    pub timestamp_unix_ns: u64,
+    pub values: Vec<NumericArrayValue>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct NumericArrayValue {
+    pub index_path: Vec<usize>,
     pub value: f64,
 }
 
@@ -162,7 +283,7 @@ pub enum RuntimeEvent {
 
 #[cfg(test)]
 mod tests {
-    use super::ChannelValue;
+    use super::{ArrayElementType, ChannelValue, NumericArrayValue};
 
     #[test]
     fn enum_values_display_name_and_discriminant() {
@@ -185,5 +306,83 @@ mod tests {
 
         assert_eq!(value.short_display(), "-1");
         assert_eq!(value.to_string(), "-1");
+    }
+
+    #[test]
+    fn arrays_display_type_dimensions_and_top_level_size() {
+        let value = ChannelValue::Array {
+            leaf_type: ArrayElementType::Integer,
+            dimensions: 2,
+            values: vec![
+                ChannelValue::Array {
+                    leaf_type: ArrayElementType::Integer,
+                    dimensions: 1,
+                    values: vec![ChannelValue::Integer(1), ChannelValue::Integer(2)],
+                },
+                ChannelValue::Array {
+                    leaf_type: ArrayElementType::Integer,
+                    dimensions: 1,
+                    values: Vec::new(),
+                },
+            ],
+        };
+
+        assert_eq!(value.short_display(), "Integer[2] (2 items)");
+        assert_eq!(value.to_string(), "Integer[2] (2 items)");
+        assert_eq!(value.numeric_value(), None);
+        assert_eq!(
+            value.numeric_array_values(),
+            Some(vec![
+                NumericArrayValue {
+                    index_path: vec![0, 0],
+                    value: 1.0,
+                },
+                NumericArrayValue {
+                    index_path: vec![0, 1],
+                    value: 2.0,
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn flat_numeric_arrays_expose_plot_values() {
+        let integers = ChannelValue::Array {
+            leaf_type: ArrayElementType::Integer,
+            dimensions: 1,
+            values: vec![ChannelValue::Integer(1), ChannelValue::Integer(2)],
+        };
+        let floats = ChannelValue::Array {
+            leaf_type: ArrayElementType::Float,
+            dimensions: 1,
+            values: vec![ChannelValue::Float(1.5), ChannelValue::Float(2.5)],
+        };
+
+        assert_eq!(
+            integers.numeric_array_values(),
+            Some(vec![
+                NumericArrayValue {
+                    index_path: vec![0],
+                    value: 1.0,
+                },
+                NumericArrayValue {
+                    index_path: vec![1],
+                    value: 2.0,
+                },
+            ])
+        );
+        assert_eq!(
+            floats.numeric_array_values(),
+            Some(vec![
+                NumericArrayValue {
+                    index_path: vec![0],
+                    value: 1.5,
+                },
+                NumericArrayValue {
+                    index_path: vec![1],
+                    value: 2.5,
+                },
+            ])
+        );
     }
 }

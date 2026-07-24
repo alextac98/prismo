@@ -97,31 +97,28 @@ fn run_app(
                     },
                     UiAction::YankSelectedValue => {
                         if ui.focus == FocusPane::Channels {
-                            if let Some(channel) = ui.selected_channel(&snapshot) {
-                                match &channel.latest {
-                                    Some(sample) if !channel.is_stale => {
-                                        let value = sample.value.to_string();
-                                        match yank_to_terminal_clipboard(&value) {
-                                            Ok(()) => ui.set_status_notice(format!(
-                                                "yanked {} = {}",
-                                                channel.descriptor.path, value
-                                            )),
-                                            Err(error) => ui.set_status_notice(format!(
-                                                "yank failed: {}",
-                                                error
-                                            )),
+                            if let Some(selected) = ui.selected_value(&snapshot) {
+                                if selected.channel.is_stale {
+                                    ui.set_status_notice(
+                                        "selected channel is stale; nothing yanked",
+                                    );
+                                } else {
+                                    let value = selected.value.to_string();
+                                    match yank_to_terminal_clipboard(&value) {
+                                        Ok(()) => ui.set_status_notice(format!(
+                                            "yanked {} = {}",
+                                            selected.path, value
+                                        )),
+                                        Err(error) => {
+                                            ui.set_status_notice(format!("yank failed: {}", error))
                                         }
                                     }
-                                    Some(_) => ui.set_status_notice(
-                                        "selected channel is stale; nothing yanked",
-                                    ),
-                                    None => {
-                                        ui.set_status_notice("selected channel has no value yet")
-                                    }
                                 }
+                            } else if ui.selected_channel(&snapshot).is_some() {
+                                ui.set_status_notice("selected channel has no value yet");
                             } else if let Some(path) = ui.selected_namespace_path(&snapshot) {
                                 ui.set_status_notice(format!(
-                                    "namespace {} has no single live value to copy",
+                                    "{} has no single live value to copy",
                                     path
                                 ));
                             } else {
@@ -140,17 +137,17 @@ fn run_app(
                     }
                     UiAction::ToggleSelectedNamespace => {
                         if ui.toggle_selected_namespace(&snapshot) {
-                            ui.set_status_notice("toggled namespace");
+                            ui.set_status_notice("toggled tree node");
                         }
                     }
                     UiAction::ToggleAllNamespaces => {
                         let (collapsed, count) = ui.toggle_all_namespaces(&snapshot);
                         if count == 0 {
-                            ui.set_status_notice("no namespaces to toggle");
+                            ui.set_status_notice("no tree nodes to toggle");
                         } else if collapsed {
-                            ui.set_status_notice(format!("collapsed {} namespaces", count));
+                            ui.set_status_notice(format!("collapsed {} tree nodes", count));
                         } else {
-                            ui.set_status_notice(format!("expanded {} namespaces", count));
+                            ui.set_status_notice(format!("expanded {} tree nodes", count));
                         }
                     }
                     UiAction::None => {}

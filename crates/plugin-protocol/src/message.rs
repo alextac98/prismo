@@ -95,7 +95,7 @@ pub struct Sample {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Value {
-    #[prost(oneof = "ValueKind", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "ValueKind", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub kind: Option<ValueKind>,
 }
 
@@ -105,6 +105,28 @@ pub struct EnumValue {
     pub value: i64,
     #[prost(string, tag = "2")]
     pub name: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, prost::Enumeration)]
+#[repr(i32)]
+pub enum ArrayElementType {
+    Unspecified = 0,
+    Bool = 1,
+    Integer = 2,
+    Float = 3,
+    Text = 4,
+    Bytes = 5,
+    Enum = 6,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ArrayValue {
+    #[prost(enumeration = "ArrayElementType", tag = "1")]
+    pub leaf_type: i32,
+    #[prost(uint32, tag = "2")]
+    pub dimensions: u32,
+    #[prost(message, repeated, tag = "3")]
+    pub values: Vec<Value>,
 }
 
 #[derive(Clone, PartialEq, prost::Oneof)]
@@ -121,6 +143,8 @@ pub enum ValueKind {
     BytesValue(Vec<u8>),
     #[prost(message, tag = "6")]
     EnumValue(EnumValue),
+    #[prost(message, tag = "7")]
+    ArrayValue(ArrayValue),
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -193,8 +217,8 @@ pub fn read_delimited<R: Read>(reader: &mut R) -> Result<Option<Envelope>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        EnumValue, Envelope, Hello, Message, Sample, SampleBatch, Value, ValueKind, read_delimited,
-        write_delimited,
+        ArrayElementType, ArrayValue, EnumValue, Envelope, Hello, Message, Sample, SampleBatch,
+        Value, ValueKind, read_delimited, write_delimited,
     };
 
     #[test]
@@ -244,6 +268,50 @@ mod tests {
         let mut slice = bytes.as_slice();
         let decoded = read_delimited(&mut slice)
             .expect("read enum envelope")
+            .expect("non-empty frame");
+
+        assert_eq!(decoded, envelope);
+    }
+
+    #[test]
+    fn round_trips_nested_array_value() {
+        let row = |values: Vec<i64>| Value {
+            kind: Some(ValueKind::ArrayValue(ArrayValue {
+                leaf_type: ArrayElementType::Integer as i32,
+                dimensions: 1,
+                values: values
+                    .into_iter()
+                    .map(|value| Value {
+                        kind: Some(ValueKind::IntegerValue(value)),
+                    })
+                    .collect(),
+            })),
+        };
+        let array = Value {
+            kind: Some(ValueKind::ArrayValue(ArrayValue {
+                leaf_type: ArrayElementType::Integer as i32,
+                dimensions: 2,
+                values: vec![row(vec![1, 2]), row(vec![3]), row(Vec::new())],
+            })),
+        };
+        let envelope = Envelope {
+            message: Some(Message::SampleBatch(SampleBatch {
+                plugin_id: "example-rust".to_string(),
+                samples: vec![Sample {
+                    channel_path: "matrix.values".to_string(),
+                    timestamp_unix_ns: 42,
+                    sequence: 1,
+                    value: Some(array),
+                }],
+            })),
+        };
+
+        let mut bytes = Vec::new();
+        write_delimited(&mut bytes, &envelope).expect("write array envelope");
+
+        let mut slice = bytes.as_slice();
+        let decoded = read_delimited(&mut slice)
+            .expect("read array envelope")
             .expect("non-empty frame");
 
         assert_eq!(decoded, envelope);
