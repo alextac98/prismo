@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::Result;
 use prismo_plugin_sdk_rust::{
     ChannelDescriptor, Sample, channel_descriptor, health, sample, stdio, value_bool, value_bytes,
-    value_float, value_integer, value_text,
+    value_enum, value_float, value_integer, value_text,
 };
 use rand::Rng;
 use serde::Deserialize;
@@ -16,6 +16,7 @@ enum SyntheticValueKind {
     Bool { nominal_probability: f64 },
     Text(&'static [&'static str]),
     Bytes { len: usize },
+    Enum(&'static [(i64, &'static str)]),
 }
 
 #[derive(Clone, Copy)]
@@ -96,6 +97,10 @@ impl SyntheticChannelSpec {
                     .map(|_| rng.random_range(0_u8..=255))
                     .collect::<Vec<_>>(),
             ),
+            SyntheticValueKind::Enum(options) => {
+                let (value, name) = options[rng.random_range(0..options.len())];
+                value_enum(value, name)
+            }
         };
 
         sample(self.path, timestamp_unix_ns, sequence, value)
@@ -457,7 +462,13 @@ impl ExampleRustPlugin {
                 "guidance.mode",
                 None,
                 "Current guidance mode",
-                SyntheticValueKind::Text(&["IDLE", "SAFE", "TRACK", "DOCK", "HOLD"]),
+                SyntheticValueKind::Enum(&[
+                    (0, "IDLE"),
+                    (1, "SAFE"),
+                    (2, "TRACK"),
+                    (3, "DOCK"),
+                    (4, "HOLD"),
+                ]),
                 4,
                 None,
             ),

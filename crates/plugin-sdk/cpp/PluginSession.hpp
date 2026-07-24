@@ -126,6 +126,21 @@ class PluginSession
         return send_sample( channel_path, timestamp_unix_ns, sequence, encoded_value );
     }
 
+    Result send_enum_sample( const char* channel_path,
+                             std::uint64_t timestamp_unix_ns,
+                             std::uint64_t sequence,
+                             std::int64_t value,
+                             const char* name )
+    {
+        std::vector<std::uint8_t> enum_value;
+        put_i64( enum_value, 1, value );
+        put_string( enum_value, 2, name );
+
+        std::vector<std::uint8_t> encoded_value;
+        put_message( encoded_value, static_cast<std::uint32_t>( ValueTag::Enum ), enum_value );
+        return send_sample( channel_path, timestamp_unix_ns, sequence, encoded_value );
+    }
+
     Result send_health( std::uint64_t emitted_updates, std::uint64_t dropped_updates, const char* last_error )
     {
         std::vector<std::uint8_t> message;
@@ -165,6 +180,7 @@ class PluginSession
         Float   = 3,
         Text    = 4,
         Bytes   = 5,
+        Enum    = 6,
     };
 
     struct InitConfig {

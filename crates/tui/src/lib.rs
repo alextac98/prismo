@@ -129,6 +129,12 @@ enum LatestPaneContent {
     },
 }
 
+#[derive(Clone, Copy)]
+enum NumericGraphKind {
+    Linear,
+    StepAfter,
+}
+
 #[derive(Default)]
 struct NamespaceNode<'a> {
     path: String,
@@ -1569,6 +1575,29 @@ fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent 
                 labeled_value_line("ASCII", &ascii, value_style()),
             ])
         }
+        Some(ChannelValue::Enum { value, name }) if !channel.history.is_empty() => {
+            build_numeric_latest_content(
+                channel,
+                vec![
+                    labeled_value_line("Name", name, value_style()),
+                    labeled_value_line("Value", &value.to_string(), value_style()),
+                    labeled_value_line("Rate", &rate, value_style()),
+                    labeled_value_line("Last Received", &last_received, value_style()),
+                    labeled_value_line(
+                        "Samples",
+                        &channel.history.len().to_string(),
+                        value_style(),
+                    ),
+                ],
+                NumericGraphKind::StepAfter,
+            )
+        }
+        Some(ChannelValue::Enum { value, name }) => LatestPaneContent::Text(vec![
+            labeled_value_line("Name", name, value_style()),
+            labeled_value_line("Value", &value.to_string(), value_style()),
+            labeled_value_line("Rate", &rate, value_style()),
+            labeled_value_line("Last Received", &last_received, value_style()),
+        ]),
         Some(ChannelValue::Text(_)) | Some(ChannelValue::Bool(_)) => LatestPaneContent::Text(vec![
             labeled_value_line(
                 "Value",
@@ -1581,26 +1610,9 @@ fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent 
             labeled_value_line("Last Received", &last_received, value_style()),
         ]),
         Some(ChannelValue::Integer(_) | ChannelValue::Float(_)) if !channel.history.is_empty() => {
-            let now_timestamp_unix_ns = current_unix_timestamp_ns();
-            let oldest_timestamp_unix_ns = channel
-                .history
-                .first()
-                .map(|point| point.timestamp_unix_ns)
-                .unwrap_or(now_timestamp_unix_ns);
-            let newest_timestamp_unix_ns = channel
-                .history
-                .last()
-                .map(|point| point.timestamp_unix_ns)
-                .unwrap_or(now_timestamp_unix_ns);
-            let chart_end_timestamp_unix_ns = newest_timestamp_unix_ns.max(now_timestamp_unix_ns);
-            let points = channel
-                .history
-                .iter()
-                .map(|point| (point.timestamp_unix_ns as f64, point.value))
-                .collect::<Vec<_>>();
-            let (min_y, max_y) = history_bounds(&channel.history);
-            LatestPaneContent::Numeric {
-                summary: vec![
+            build_numeric_latest_content(
+                channel,
+                vec![
                     labeled_value_line(
                         "Value",
                         &latest
@@ -1616,24 +1628,8 @@ fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent 
                         value_style(),
                     ),
                 ],
-                points,
-                min_x: oldest_timestamp_unix_ns as f64,
-                max_x: chart_end_timestamp_unix_ns as f64,
-                x_labels: [
-                    format_chart_edge_label(
-                        "old",
-                        oldest_timestamp_unix_ns,
-                        chart_end_timestamp_unix_ns,
-                    ),
-                    format_chart_edge_label(
-                        "now",
-                        chart_end_timestamp_unix_ns,
-                        chart_end_timestamp_unix_ns,
-                    ),
-                ],
-                min_y,
-                max_y,
-            }
+                NumericGraphKind::Linear,
+            )
         }
         Some(ChannelValue::Integer(_) | ChannelValue::Float(_)) => LatestPaneContent::Text(vec![
             labeled_value_line(
@@ -1647,6 +1643,73 @@ fn build_channel_latest_content(channel: &ChannelSnapshot) -> LatestPaneContent 
             labeled_value_line("Last Received", &last_received, value_style()),
         ]),
         _ => LatestPaneContent::Text(vec![plain_line("No detailed renderer for this value yet.")]),
+    }
+}
+
+fn build_numeric_latest_content(
+    channel: &ChannelSnapshot,
+    summary: Vec<SelectableLine>,
+    graph_kind: NumericGraphKind,
+) -> LatestPaneContent {
+    let now_timestamp_unix_ns = current_unix_timestamp_ns();
+    let oldest_timestamp_unix_ns = channel
+        .history
+        .first()
+        .map(|point| point.timestamp_unix_ns)
+        .unwrap_or(now_timestamp_unix_ns);
+    let newest_timestamp_unix_ns = channel
+        .history
+        .last()
+        .map(|point| point.timestamp_unix_ns)
+        .unwrap_or(now_timestamp_unix_ns);
+    let chart_end_timestamp_unix_ns = newest_timestamp_unix_ns.max(now_timestamp_unix_ns);
+    let points = numeric_history_points(&channel.history, graph_kind);
+    let (min_y, max_y) = history_bounds(&channel.history);
+
+    LatestPaneContent::Numeric {
+        summary,
+        points,
+        min_x: oldest_timestamp_unix_ns as f64,
+        max_x: chart_end_timestamp_unix_ns as f64,
+        x_labels: [
+            format_chart_edge_label("old", oldest_timestamp_unix_ns, chart_end_timestamp_unix_ns),
+            format_chart_edge_label(
+                "now",
+                chart_end_timestamp_unix_ns,
+                chart_end_timestamp_unix_ns,
+            ),
+        ],
+        min_y,
+        max_y,
+    }
+}
+
+fn numeric_history_points(
+    history: &[NumericPoint],
+    graph_kind: NumericGraphKind,
+) -> Vec<(f64, f64)> {
+    match graph_kind {
+        NumericGraphKind::Linear => history
+            .iter()
+            .map(|point| (point.timestamp_unix_ns as f64, point.value))
+            .collect(),
+        NumericGraphKind::StepAfter => {
+            let mut points = Vec::with_capacity(history.len().saturating_mul(2).saturating_sub(1));
+            let Some(first) = history.first() else {
+                return points;
+            };
+            points.push((first.timestamp_unix_ns as f64, first.value));
+
+            for pair in history.windows(2) {
+                let previous = pair[0];
+                let next = pair[1];
+                let next_timestamp = next.timestamp_unix_ns as f64;
+                points.push((next_timestamp, previous.value));
+                points.push((next_timestamp, next.value));
+            }
+
+            points
+        }
     }
 }
 
@@ -2059,6 +2122,79 @@ mod tests {
                 assert!(max_y > 42.0);
             }
             LatestPaneContent::Text(_) => panic!("expected numeric content for integer channel"),
+        }
+    }
+
+    #[test]
+    fn enum_channels_graph_discriminants() {
+        let channel = ChannelSnapshot {
+            plugin_id: "example".to_string(),
+            descriptor: ChannelDescriptor {
+                path: "guidance.mode".to_string(),
+                display_name: "Mode".to_string(),
+                unit: None,
+                description: "Guidance mode".to_string(),
+            },
+            latest: Some(ChannelSample {
+                path: "guidance.mode".to_string(),
+                value: ChannelValue::Enum {
+                    value: 2,
+                    name: "SAFE".to_string(),
+                },
+                observed_at: Instant::now(),
+                received_timestamp_unix_ns: 3_000_000_000,
+                source_timestamp_unix_ns: 42,
+                sequence: 1,
+            }),
+            history: vec![
+                NumericPoint {
+                    timestamp_unix_ns: 1_000_000_000,
+                    value: 0.0,
+                },
+                NumericPoint {
+                    timestamp_unix_ns: 2_000_000_000,
+                    value: 1.0,
+                },
+                NumericPoint {
+                    timestamp_unix_ns: 3_000_000_000,
+                    value: 2.0,
+                },
+            ],
+            update_count: 3,
+            rate_hz: Some(2.0),
+            is_stale: false,
+        };
+
+        match build_channel_latest_content(&channel) {
+            LatestPaneContent::Numeric {
+                summary,
+                points,
+                min_y,
+                max_y,
+                ..
+            } => {
+                assert_eq!(summary.len(), 5);
+                assert_eq!(summary[0].raw, "Name: SAFE");
+                assert_eq!(summary[1].raw, "Value: 2");
+                assert_eq!(summary[2].raw, "Rate: 2.00 Hz");
+                assert!(summary[3].raw.starts_with("Last Received: "));
+                assert_eq!(summary[4].raw, "Samples: 3");
+                assert_eq!(
+                    points,
+                    vec![
+                        (1_000_000_000_f64, 0.0),
+                        (2_000_000_000_f64, 0.0),
+                        (2_000_000_000_f64, 1.0),
+                        (3_000_000_000_f64, 1.0),
+                        (3_000_000_000_f64, 2.0),
+                    ]
+                );
+                assert!(min_y < 0.0);
+                assert!(max_y > 2.0);
+            }
+            LatestPaneContent::Text(_) => {
+                panic!("expected numeric content for enum channel")
+            }
         }
     }
 

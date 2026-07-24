@@ -135,6 +135,7 @@ The current canonical value types are:
 - `Float`
 - `Text`
 - `Bytes`
+- `Enum`, represented by an integer discriminant and symbolic name
 
 The store keeps:
 
@@ -221,6 +222,7 @@ Renderers:
 
 - numeric values: line chart plus textual summary
 - text/integer/bool values: simple text block
+- enum values: step chart of the integer discriminant plus the symbolic name
 - bytes values: hex and ASCII summary
 
 The details pane is intentionally fixed-height and non-scrolling:

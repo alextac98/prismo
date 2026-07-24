@@ -118,6 +118,7 @@ The current renderer split is by `ChannelValue`:
 - bytes -> hex/ASCII block
 - numeric -> text summary plus line chart
 - text/integer/bool -> text block
+- enum -> integer-discriminant step chart plus symbolic name
 
 A few UI rules matter when extending renderers:
 
@@ -134,7 +135,6 @@ If you need more telemetry semantics, start in `crates/core/src/model.rs`.
 
 Likely future expansions:
 
-- enums with labels
 - structured key/value values
 - units and formatting hints
 - source stream IDs

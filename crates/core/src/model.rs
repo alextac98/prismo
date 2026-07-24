@@ -16,6 +16,7 @@ pub enum ChannelValue {
     Float(f64),
     Text(String),
     Bytes(Vec<u8>),
+    Enum { value: i64, name: String },
 }
 
 impl ChannelValue {
@@ -23,6 +24,7 @@ impl ChannelValue {
         match self {
             Self::Integer(value) => Some(*value as f64),
             Self::Float(value) => Some(*value),
+            Self::Enum { value, .. } => Some(*value as f64),
             _ => None,
         }
     }
@@ -39,6 +41,7 @@ impl ChannelValue {
                 .map(|byte| format!("{byte:02X}"))
                 .collect::<Vec<_>>()
                 .join(" "),
+            Self::Enum { value, name } => format_enum_value(*value, name),
         }
     }
 }
@@ -58,7 +61,16 @@ impl fmt::Display for ChannelValue {
                     .join(" ");
                 f.write_str(&rendered)
             }
+            Self::Enum { value, name } => f.write_str(&format_enum_value(*value, name)),
         }
+    }
+}
+
+fn format_enum_value(value: i64, name: &str) -> String {
+    if name.is_empty() {
+        value.to_string()
+    } else {
+        format!("{name} ({value})")
     }
 }
 
@@ -146,4 +158,32 @@ pub struct PluginStatusUpdate {
 pub enum RuntimeEvent {
     Telemetry(TelemetryUpdate),
     PluginStatus(PluginStatusUpdate),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ChannelValue;
+
+    #[test]
+    fn enum_values_display_name_and_discriminant() {
+        let value = ChannelValue::Enum {
+            value: 2,
+            name: "SAFE".to_string(),
+        };
+
+        assert_eq!(value.short_display(), "SAFE (2)");
+        assert_eq!(value.to_string(), "SAFE (2)");
+        assert_eq!(value.numeric_value(), Some(2.0));
+    }
+
+    #[test]
+    fn unnamed_enum_values_display_discriminant() {
+        let value = ChannelValue::Enum {
+            value: -1,
+            name: String::new(),
+        };
+
+        assert_eq!(value.short_display(), "-1");
+        assert_eq!(value.to_string(), "-1");
+    }
 }

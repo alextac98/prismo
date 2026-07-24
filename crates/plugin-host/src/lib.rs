@@ -564,7 +564,10 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{resolve_command, resolve_plugins};
+    use prismo_core::ChannelValue;
+    use prismo_plugin_protocol::{EnumValue, Value, ValueKind};
+
+    use super::{decode_value, resolve_command, resolve_plugins};
 
     #[test]
     fn resolves_entrypoint_relative_to_manifest_dir() {
@@ -608,6 +611,25 @@ argv = ["./bin/test-plugin"]
         }));
     }
 
+    #[test]
+    fn decodes_enum_value() {
+        let decoded = decode_value(Some(Value {
+            kind: Some(ValueKind::EnumValue(EnumValue {
+                value: 2,
+                name: "SAFE".to_string(),
+            })),
+        }))
+        .expect("decode enum");
+
+        match decoded {
+            ChannelValue::Enum { value, name } => {
+                assert_eq!(value, 2);
+                assert_eq!(name, "SAFE");
+            }
+            _ => panic!("expected enum channel value"),
+        }
+    }
+
     fn unique_temp_path(prefix: &str) -> PathBuf {
         let mut path = std::env::temp_dir();
         let nanos = SystemTime::now()
@@ -626,6 +648,10 @@ fn decode_value(value: Option<prismo_plugin_protocol::Value>) -> Result<ChannelV
         Some(ValueKind::FloatValue(value)) => Ok(ChannelValue::Float(value)),
         Some(ValueKind::TextValue(value)) => Ok(ChannelValue::Text(value)),
         Some(ValueKind::BytesValue(value)) => Ok(ChannelValue::Bytes(value)),
+        Some(ValueKind::EnumValue(value)) => Ok(ChannelValue::Enum {
+            value: value.value,
+            name: value.name,
+        }),
         None => bail!("sample missing value"),
     }
 }
