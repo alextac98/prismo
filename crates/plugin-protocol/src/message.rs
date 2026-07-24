@@ -95,8 +95,16 @@ pub struct Sample {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Value {
-    #[prost(oneof = "ValueKind", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "ValueKind", tags = "1, 2, 3, 4, 5, 6")]
     pub kind: Option<ValueKind>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct EnumValue {
+    #[prost(int64, tag = "1")]
+    pub value: i64,
+    #[prost(string, tag = "2")]
+    pub name: String,
 }
 
 #[derive(Clone, PartialEq, prost::Oneof)]
@@ -111,6 +119,8 @@ pub enum ValueKind {
     TextValue(String),
     #[prost(bytes, tag = "5")]
     BytesValue(Vec<u8>),
+    #[prost(message, tag = "6")]
+    EnumValue(EnumValue),
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -182,7 +192,10 @@ pub fn read_delimited<R: Read>(reader: &mut R) -> Result<Option<Envelope>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Envelope, Hello, Message, read_delimited, write_delimited};
+    use super::{
+        EnumValue, Envelope, Hello, Message, Sample, SampleBatch, Value, ValueKind, read_delimited,
+        write_delimited,
+    };
 
     #[test]
     fn round_trips_delimited_envelope() {
@@ -201,6 +214,36 @@ mod tests {
         let mut slice = bytes.as_slice();
         let decoded = read_delimited(&mut slice)
             .expect("read envelope")
+            .expect("non-empty frame");
+
+        assert_eq!(decoded, envelope);
+    }
+
+    #[test]
+    fn round_trips_enum_value() {
+        let envelope = Envelope {
+            message: Some(Message::SampleBatch(SampleBatch {
+                plugin_id: "example-rust".to_string(),
+                samples: vec![Sample {
+                    channel_path: "guidance.mode".to_string(),
+                    timestamp_unix_ns: 42,
+                    sequence: 1,
+                    value: Some(Value {
+                        kind: Some(ValueKind::EnumValue(EnumValue {
+                            value: 2,
+                            name: "SAFE".to_string(),
+                        })),
+                    }),
+                }],
+            })),
+        };
+
+        let mut bytes = Vec::new();
+        write_delimited(&mut bytes, &envelope).expect("write enum envelope");
+
+        let mut slice = bytes.as_slice();
+        let decoded = read_delimited(&mut slice)
+            .expect("read enum envelope")
             .expect("non-empty frame");
 
         assert_eq!(decoded, envelope);

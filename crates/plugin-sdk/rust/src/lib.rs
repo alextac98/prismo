@@ -3,7 +3,9 @@ use std::io::{self, BufReader, BufWriter, Read, Write};
 use anyhow::{Context, Result, bail};
 use serde::de::DeserializeOwned;
 
-pub use prismo_plugin_protocol::{ChannelDescriptor, Health, Init, Sample, Value, ValueKind};
+pub use prismo_plugin_protocol::{
+    ChannelDescriptor, EnumValue, Health, Init, Sample, Value, ValueKind,
+};
 use prismo_plugin_protocol::{
     DeclareChannels, Envelope, Hello, Log, Message, SampleBatch, read_delimited, write_delimited,
 };
@@ -141,6 +143,15 @@ pub fn value_bytes(value: Vec<u8>) -> Value {
     }
 }
 
+pub fn value_enum(value: i64, name: impl Into<String>) -> Value {
+    Value {
+        kind: Some(prismo_plugin_protocol::ValueKind::EnumValue(EnumValue {
+            value,
+            name: name.into(),
+        })),
+    }
+}
+
 pub fn channel_descriptor<U: Into<String>>(
     channel_path: impl Into<String>,
     display_name: impl Into<String>,
@@ -189,8 +200,8 @@ mod tests {
 
     use serde::Deserialize;
 
-    use super::build_stdio;
-    use prismo_plugin_protocol::{Envelope, Init, Message, write_delimited};
+    use super::{build_stdio, value_enum};
+    use prismo_plugin_protocol::{Envelope, Init, Message, ValueKind, write_delimited};
 
     #[derive(Debug, Deserialize, Eq, PartialEq)]
     struct ExampleConfig {
@@ -216,5 +227,18 @@ mod tests {
             io.config::<ExampleConfig>().expect("config"),
             ExampleConfig { tick_ms: 150 }
         );
+    }
+
+    #[test]
+    fn builds_enum_value() {
+        let value = value_enum(2, "SAFE");
+
+        match value.kind {
+            Some(ValueKind::EnumValue(value)) => {
+                assert_eq!(value.value, 2);
+                assert_eq!(value.name, "SAFE");
+            }
+            _ => panic!("expected enum value"),
+        }
     }
 }

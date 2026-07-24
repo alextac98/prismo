@@ -47,6 +47,13 @@ int main() {
            .value_or(false)) {
     return 1;
   }
+  if (!plugin
+           ->declare_channel("cpp.system.mode", "Mode", "",
+                             "C++ plugin operating mode")
+           .ok()
+           .value_or(false)) {
+    return 1;
+  }
 
   std::uint64_t sequence = 0;
   while (true) {
@@ -68,6 +75,16 @@ int main() {
       return 1;
     }
     if (!plugin->send_bool_sample("cpp.system.online", timestamp, sequence, true)
+             .ok()
+             .value_or(false)) {
+      return 1;
+    }
+    const auto mode = static_cast<std::int64_t>(sequence % 3);
+    const char* mode_name =
+        mode == 0 ? "IDLE" : (mode == 1 ? "ACTIVE" : "DIAGNOSTIC");
+    if (!plugin
+             ->send_enum_sample("cpp.system.mode", timestamp, sequence, mode,
+                                mode_name)
              .ok()
              .value_or(false)) {
       return 1;
